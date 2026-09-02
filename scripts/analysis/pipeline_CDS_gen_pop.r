@@ -5,6 +5,8 @@ library(dplyr)
 library(rstatix)
 library(ggplot2)
 library(patchwork)
+library(factoextra)
+library(psych)
 
 ######### Charge and visualize dataset ##########
 
@@ -162,6 +164,82 @@ for (col in num_cols) {
 }
 
 
+
+
+
+
+#############################################################################################################################
+# Linear Regression #
+#############################################################################################################################
+
+########## EFA ###########
+items <- df %>% 
+  select(all_of(CDS_items)) %>% 
+  filter(complete.cases(.))
+summary(items)
+sum(is.na(items))
+
+##### Assumptions ######
+
+# Multicolinearity
+
+cor_matrix <- cor(items, use = "pairwise.complete.obs")
+
+corr_values <- cor_matrix[lower.tri(cor_matrix)]
+
+range(corr_values)
+
+mean(cor_matrix[lower.tri(cor_matrix)], na.rm = TRUE)
+
+
+# Bartlett sphericity test
+cor_matrix <- cor(items)                                   # correlation matrix of items
+bartlett_test <- cortest.bartlett(cor_matrix, n = nrow(items))
+print(bartlett_test)
+# Significant so ok to EFA
+
+# Kaiser-Meye-Oklin measure : sampling adequacy from proportion of variance among items
+kmo_result <- KMO(items)
+print(kmo_result$MSA) 
+#Result > 0.90 = marvelous
+
+# Kaiser criterion
+eigenvalues <- eigen(cor_matrix)$values
+sum(eigenvalues > 1)   # number of eigenvalues > 1
+# Indicates 7 factors but sensitive tu number of items, overestimation
+
+# Scree plot
+pca <- prcomp(items, scale. = TRUE)
+fviz_screeplot(pca, addlabels = TRUE, ncp = 10)  # show first 10 components
+# I would say 3-4 factors from the elbow on the scree plot
+
+# Parallel analysis
+fa.parallel(items, fm = "minres", fa = "fa", n.iter = 100, main = "Parallel Analysis Scree") 
+# Indicates 8 factors (but sensitive to sample size and number of items, might overestimate number of factors)
+
+
+#### EFA with 3 factors and promax rotation (correlated factors)
+efa1_result <- fa(items, nfactors = 3, rotate = "promax", fm = "minres")
+print(efa1_result$loadings, cutoff = 0.4, digits = 3)
+
+loadings_matrix1 <- unclass(efa1_result$loadings)
+print(loadings_matrix1, digits=3)
+
+
+#### EFA with 4 factors and promax rotation (correlated factors)  
+efa_result2 <- fa(items, nfactors = 4, rotate = "promax", fm = "minres")
+print(efa_result2$loadings, cutoff = 0.4, digits = 3)
+
+loadings_matrix2 <- unclass(efa_result2$loadings)
+print(loadings_matrix2, digits=3)
+
+
+#### EFA with 5 factors and promax rotation (correlated factors)
+efa_result3 <- fa(items, nfactors = 5, rotate = "promax", fm = "minres")
+print(efa_result3$loadings, cutoff = 0.4, digits = 3)
+
+loadings_matrix3 <- unclass(efa_result3$loadings)
+print(loadings_matrix3, digits=3)
 
 
 
