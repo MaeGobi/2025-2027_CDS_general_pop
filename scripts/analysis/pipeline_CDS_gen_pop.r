@@ -11,7 +11,8 @@ library(patchwork)
 # Repository definition for R project. All files called from this repo.
 here()
 
-df <- read.csv(file = here("data", "2026-ALL350PATIENTS350CONTROLS_PK_15-06-26.csv"), header = TRUE, sep = ";", dec = ",")
+df <- read.csv(file = here("data", "2026-ALL350PATIENTS350CONTROLS_PK_15-06-26.csv"), 
+               header = TRUE, sep = ";", dec = ",", na.strings = c("NA", "NaN", "#NUL!", ""))
 head(df)
 colnames(df)
 nrow(df)
@@ -33,10 +34,10 @@ cols_int <- c("SEXE", "LATERALITE", "AGE", "PROFESSION", "FAMILLE", "FUMEUR", "M
               "CDS27","CDS28", "CDS29", "OBE", "ANXIETE", "DEPRESSION", "CDStotal", "FREQUENCYall", "DURATIONall")
 
 # Count number of missing/empty values for each interest column
-colSums(is.na(df[cols_int]) | df[cols_int]=="")
+colSums(is.na(df[cols_int]) | df[cols_int]=="" |is.null(df[cols_int]))
 
 # Display row number of missing/empty values for each variable
-missing <- sapply(df[cols_int], function(x) which(is.na(x) | x == "") + 1)
+missing <- sapply(df[cols_int], function(x) which(is.na(x) | x == "" | is.null(x)) + 1)
 missing
 
 
@@ -60,13 +61,13 @@ cat ("CDStotal : Aberrant values (>290):", av, "\n")
 anxdep <- c("ANXIETE", "DEPRESSION")
 for (col in anxdep) {
   av <- sum(df[[col]]  > 21, na.rm = TRUE)
-  cat (col, " : Aberrant values (>21):", av, "\n")
+  cat (col, ": Aberrant values (>21):", av, "\n")
 }
 
 
 
+############ See variables distribution ##################
 
-######### Outliers identification #########
 num_cols <- c("AGE", "CDS1", "CDS2","CDS3", "CDS4", "CDS5", "CDS6", "CDS7", "CDS8", "CDS9", "CDS10", "CDS11", "CDS12",
               "CDS13", "CDS14", "CDS15","CDS16", "CDS17", "CDS18", "CDS19", "CDS20", "CDS21", "CDS22", "CDS23", 
               "CDS24", "CDS25", "CDS26", "CDS27","CDS28", "CDS29", "ANXIETE", "DEPRESSION", "CDStotal", 
@@ -77,7 +78,7 @@ df[num_cols] <- lapply(df[num_cols], function(x) as.numeric(as.character(x)))
 summary(df[num_cols])
 
 ####### Plot numerical variables distribution #######
-plot_list <- lapply(num_cols, function(col) {
+distrib_plot_list <- lapply(num_cols, function(col) {
   p <- ggplot(df, aes(x= .data[[col]])) +
   geom_histogram(aes(y=after_stat(density)), bins=30, fill="purple4", color="white") +
   geom_density(fill="grey", alpha = 0.5) +
@@ -85,27 +86,82 @@ plot_list <- lapply(num_cols, function(col) {
   geom_vline(xintercept = median(df[[col]], na.rm=TRUE), linetype="dotdash", color="red", linewidth=1) +
   theme_minimal()
 })
-names(plot_list) <- num_cols
+names(distrib_plot_list) <- num_cols
 
 # Combine all plots
-wrap_plots(plot_list, ncol=6)
+wrap_plots(distrib_plot_list, ncol=6)
 
 # Save figure
 ggsave(here("figures", "numeric_distribution_plots.png"),
-       wrap_plots(plot_list, ncol=6),
+       wrap_plots(distrib_plot_list, ncol=6),
        width = 30, height = 20, dpi = 300)
 
-# Visualize (boxplots), count and identify values of outliers
-par(mfrow = c(3,3))
 
+
+########## Plot categorical variables ###############
+cat_cols <- c("SEXE", "LATERALITE", "PROFESSION", "FAMILLE", "FUMEUR", "MIGRAINE", "ALCOOL", "aucuntroublevisuel",
+              "myopie", "astigmatisme", "maladierétine", "glaucome", "lunettes", "lentilles", "ETUDES", 
+              "OBE")
+
+df[cat_cols] <- lapply(df[cat_cols], factor)
+
+# Description categorical variables
+sum_cat <- lapply(df[cat_cols], function(x) as.data.frame(table(x)))
+sum_cat
+
+# Barplot of categorical variables distribution
+cat_dist_plots <- lapply(cat_cols, function(col) {
+  p<- ggplot(df %>% filter(!is.na(.data[[col]])), aes(x = .data[[col]])) +
+    geom_bar(fill="darkblue") +
+    geom_text(stat="count", aes(label=after_stat(count)), vjust=-0.5, size = 3) +
+    scale_y_continuous(expand=expansion(mult=c(0, 0.15))) +
+    theme_light() +
+    theme(legend.text=element_text(size=6), 
+          plot.title=element_text(size=8),
+          axis.text.x=element_text(size=8),
+          axis.text.y=element_text(size=8))
+  return(p)
+})
+names(cat_dist_plots) <- cat_cols
+
+wrap_plots(cat_dist_plots, ncol=6)
+
+ggsave(here("figures", "catge_distribution_plots.png"),
+       wrap_plots(cat_dist_plots, ncol=6),
+       width = 30, height = 20, dpi = 300)
+
+
+######### Outliers identification #########
+
+# Visualize (boxplots)
+box_plot_list <- lapply(num_cols, function(col) {
+  p <- ggplot(df, aes(y= .data[[col]])) +
+    geom_boxplot(outliers_color="black", outliers_size=0.5, fill="skyblue") +
+    labs(y=col) +
+    theme_light()
+  return(p)
+})
+names(box_plot_list) <- num_cols
+
+# Combine all plots
+wrap_plots(box_plot_list, ncol=6)
+
+# Save figure
+ggsave(here("figures", "numeric_box_plots.png"),
+       wrap_plots(box_plot_list, ncol=6),
+       width = 30, height = 20, dpi = 300)
+
+# Count and identify values of outliers
 for (col in num_cols) {
   out_values <- boxplot.stats(df[[col]])$out
-  
   cat("\n=== Colonne:", col, "===\n")
   cat("Nombre d'outliers:", length(out_values), "\n")
   if (length(out_values) > 0) {
     cat("Valeurs:", paste(out_values, collapse = ", "), "\n")
   }
 }
+
+
+
 
 
