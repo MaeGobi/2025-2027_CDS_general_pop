@@ -13,7 +13,7 @@ library(psych)
 # Repository definition for R project. All files called from this repo.
 here()
 
-df <- read.csv(file = here("data", "2026-ALL350PATIENTS350CONTROLS_PK_15-06-26.csv"), 
+df <- read.csv(file = here("data", "2026-controls-CDS.csv"), 
                header = TRUE, sep = ";", dec = ",", na.strings = c("NA", "NaN", "#NUL!", ""))
 head(df)
 colnames(df)
@@ -21,9 +21,11 @@ nrow(df)
 
 # Transform df to exclude rows from VESTICOR study
 df <- df[1:665, ]
-
 nrow(df)
 
+inclus <- df$INCLUSION_CDS_VALIDATION==1
+df <- df[inclus,]
+nrow(df)
 
 ########## Preprocessing ##########
 # NaN inspection
@@ -33,7 +35,7 @@ cols_int <- c("SEXE", "LATERALITE", "AGE", "PROFESSION", "FAMILLE", "FUMEUR", "M
               "myopie", "astigmatisme", "maladierétine", "glaucome", "lunettes", "lentilles", "ETUDES", "CDS1", "CDS2",
               "CDS3", "CDS4", "CDS5", "CDS6", "CDS7", "CDS8", "CDS9", "CDS10", "CDS11", "CDS12", "CDS13", "CDS14", 
               "CDS15","CDS16", "CDS17", "CDS18", "CDS19", "CDS20", "CDS21", "CDS22", "CDS23", "CDS24", "CDS25", "CDS26",
-              "CDS27","CDS28", "CDS29", "OBE", "ANXIETE", "DEPRESSION", "CDStotal", "FREQUENCYall", "DURATIONall")
+              "CDS27","CDS28", "CDS29", "OBE", "ANXIETE_recoded", "DEPRESSION_recoded", "CDStotal", "FREQUENCYall", "DURATIONall")
 
 # Count number of missing/empty values for each interest column
 colSums(is.na(df[cols_int]) | df[cols_int]=="" |is.null(df[cols_int]))
@@ -60,7 +62,7 @@ cat ("CDStotal : Aberrant values (>290):", av, "\n")
 
 
 # For HADS A and D
-anxdep <- c("ANXIETE", "DEPRESSION")
+anxdep <- c("ANXIETE_recoded", "DEPRESSION_recoded")
 for (col in anxdep) {
   av <- sum(df[[col]]  > 21, na.rm = TRUE)
   cat (col, ": Aberrant values (>21):", av, "\n")
@@ -169,7 +171,7 @@ for (col in num_cols) {
 
 
 #############################################################################################################################
-# Linear Regression #
+# Exploratory Factor Analysis #
 #############################################################################################################################
 
 ########## EFA ###########
