@@ -13,18 +13,20 @@ library(psych)
 # Repository definition for R project. All files called from this repo.
 here()
 
-df <- read.csv(file = here("data", "2026-controls-CDS.csv"), 
+df_raw <- read.csv(file = here("data", "2026-controls-CDS.csv"), 
                header = TRUE, sep = ";", dec = ",", na.strings = c("NA", "NaN", "#NUL!", ""))
 head(df)
 colnames(df)
 nrow(df)
 
 # Transform df to exclude rows from VESTICOR study
-df <- df[1:665, ]
-nrow(df)
+df_raw2 <- df_raw[1:665, ]
+nrow(df_raw2)
+as.data.frame(table(df_raw2$raison_exclusion))
 
-inclus <- df$INCLUSION_CDS_VALIDATION==1
-df <- df[inclus,]
+
+inclus <- df_raw2$INCLUSION_CDS_VALIDATION==1
+df <- df_raw2[inclus,]
 nrow(df)
 
 ########## Preprocessing ##########
@@ -181,6 +183,9 @@ items <- df %>%
 summary(items)
 sum(is.na(items))
 
+
+describe(items)[, c("skew", "kurtosis")]
+
 ##### Assumptions ######
 
 # Multicolinearity
@@ -203,7 +208,7 @@ print(bartlett_test)
 # Kaiser-Meye-Oklin measure : sampling adequacy from proportion of variance among items
 kmo_result <- KMO(items)
 print(kmo_result$MSA) 
-#Result > 0.90 = marvelous
+#Result > 0.894 = OK (méritoire)
 
 # Kaiser criterion
 eigenvalues <- eigen(cor_matrix)$values
@@ -216,12 +221,12 @@ fviz_screeplot(pca, addlabels = TRUE, ncp = 10)  # show first 10 components
 # I would say 3-4 factors from the elbow on the scree plot
 
 # Parallel analysis
-fa.parallel(items, fm = "minres", fa = "fa", n.iter = 100, main = "Parallel Analysis Scree") 
-# Indicates 8 factors (but sensitive to sample size and number of items, might overestimate number of factors)
+fa.parallel(items, fm = "ml", fa = "fa", n.iter = 100, main = "Parallel Analysis Scree") 
+# Indicates 7 factors (but sensitive to sample size and number of items, might overestimate number of factors)
 
 
 #### EFA with 3 factors and promax rotation (correlated factors)
-efa1_result <- fa(items, nfactors = 3, rotate = "promax", fm = "minres")
+efa1_result <- fa(items, nfactors = 3, rotate = "promax", fm = "ml")
 print(efa1_result$loadings, cutoff = 0.4, digits = 3)
 
 loadings_matrix1 <- unclass(efa1_result$loadings)
