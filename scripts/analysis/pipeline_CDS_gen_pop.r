@@ -14,30 +14,31 @@ library(psych)
 here()
 
 df_raw <- read.csv(file = here("data", "2026-controls-CDS.csv"), 
-               header = TRUE, sep = ";", dec = ",", na.strings = c("NA", "NaN", "#NUL!", ""))
-head(df)
-colnames(df)
-nrow(df)
+               header = TRUE, sep = ";", dec = ",", na.strings = c("NaN", "Na", "#NUL!", " "))
+head(df_raw)
+colnames(df_raw)
+nrow(df_raw)
 
 # Transform df to exclude rows from VESTICOR study
 df_raw2 <- df_raw[1:665, ]
 nrow(df_raw2)
 as.data.frame(table(df_raw2$raison_exclusion))
-
+as.data.frame(table(df_raw2$Difference_sum))
 
 inclus <- df_raw2$INCLUSION_CDS_VALIDATION==1
 df <- df_raw2[inclus,]
 nrow(df)
+as.data.frame(table(df$Difference_sum))
 
 ########## Preprocessing ##########
 # NaN inspection
 
 # Define interest columns
 cols_int <- c("SEXE", "LATERALITE", "AGE", "PROFESSION", "FAMILLE", "FUMEUR", "MIGRAINE", "ALCOOL", "aucuntroublevisuel",
-              "myopie", "astigmatisme", "maladierétine", "glaucome", "lunettes", "lentilles", "ETUDES", "CDS1", "CDS2",
+              "myopie", "astigmatisme", "maladierétine", "glaucome", "trouble_vision_global", "lunettes", "lentilles", "ETUDES", "CDS1", "CDS2",
               "CDS3", "CDS4", "CDS5", "CDS6", "CDS7", "CDS8", "CDS9", "CDS10", "CDS11", "CDS12", "CDS13", "CDS14", 
               "CDS15","CDS16", "CDS17", "CDS18", "CDS19", "CDS20", "CDS21", "CDS22", "CDS23", "CDS24", "CDS25", "CDS26",
-              "CDS27","CDS28", "CDS29", "OBE", "ANXIETE_recoded", "DEPRESSION_recoded", "CDStotal", "FREQUENCYall", "DURATIONall")
+              "CDS27","CDS28", "CDS29", "OBE", "ANXIETE_recoded", "DEPRESSION_recoded", "CDStotal_matlab", "CDS_total_sum", "FREQUENCYall", "DURATIONall")
 
 # Count number of missing/empty values for each interest column
 colSums(is.na(df[cols_int]) | df[cols_int]=="" |is.null(df[cols_int]))
@@ -59,8 +60,8 @@ for (col in CDS_items) {
 
 
 # For CDS total score
-av <- sum(df$CDStotal > 290, na.rm = TRUE)
-cat ("CDStotal : Aberrant values (>290):", av, "\n")
+av <- sum(df$CDS_total_sum > 290, na.rm = TRUE)
+cat ("CDS total : Aberrant values (>290):", av, "\n")
 
 
 # For HADS A and D
@@ -76,7 +77,7 @@ for (col in anxdep) {
 
 num_cols <- c("AGE", "CDS1", "CDS2","CDS3", "CDS4", "CDS5", "CDS6", "CDS7", "CDS8", "CDS9", "CDS10", "CDS11", "CDS12",
               "CDS13", "CDS14", "CDS15","CDS16", "CDS17", "CDS18", "CDS19", "CDS20", "CDS21", "CDS22", "CDS23", 
-              "CDS24", "CDS25", "CDS26", "CDS27","CDS28", "CDS29", "ANXIETE", "DEPRESSION", "CDStotal", 
+              "CDS24", "CDS25", "CDS26", "CDS27","CDS28", "CDS29", "ANXIETE", "DEPRESSION", "CDStotal_matlab", "CDS_total_sum", 
               "FREQUENCYall", "DURATIONall")
 
 df[num_cols] <- lapply(df[num_cols], function(x) as.numeric(as.character(x)))
@@ -106,7 +107,7 @@ ggsave(here("figures", "numeric_distribution_plots.png"),
 
 ########## Plot categorical variables ###############
 cat_cols <- c("SEXE", "LATERALITE", "PROFESSION", "FAMILLE", "FUMEUR", "MIGRAINE", "ALCOOL", "aucuntroublevisuel",
-              "myopie", "astigmatisme", "maladierétine", "glaucome", "lunettes", "lentilles", "ETUDES", 
+              "myopie", "astigmatisme", "maladierétine", "glaucome", "lunettes", "lentilles", "trouble_vision_global", "ETUDES", 
               "OBE")
 
 df[cat_cols] <- lapply(df[cat_cols], factor)
@@ -117,7 +118,7 @@ sum_cat
 
 # Barplot of categorical variables distribution
 cat_dist_plots <- lapply(cat_cols, function(col) {
-  p<- ggplot(df %>% filter(!is.na(.data[[col]])), aes(x = .data[[col]])) +
+  p<- ggplot(df %>% filter(!is.na(.data[[col]]), !.data[[col]] %in% c("", "NaN", "#NUL!")), aes(x = .data[[col]])) +
     geom_bar(fill="darkblue") +
     geom_text(stat="count", aes(label=after_stat(count)), vjust=-0.5, size = 3) +
     scale_y_continuous(expand=expansion(mult=c(0, 0.15))) +
@@ -152,7 +153,7 @@ names(box_plot_list) <- num_cols
 # Combine all plots
 wrap_plots(box_plot_list, ncol=6)
 
-# Save figure
+# Save figurehttp://127.0.0.1:31017/graphics/plot_zoom_png?width=1266&height=636
 ggsave(here("figures", "numeric_box_plots.png"),
        wrap_plots(box_plot_list, ncol=6),
        width = 30, height = 20, dpi = 300)
