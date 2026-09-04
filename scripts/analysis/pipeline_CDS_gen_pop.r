@@ -153,7 +153,7 @@ names(box_plot_list) <- num_cols
 # Combine all plots
 wrap_plots(box_plot_list, ncol=6)
 
-# Save figurehttp://127.0.0.1:31017/graphics/plot_zoom_png?width=1266&height=636
+# Save figure
 ggsave(here("figures", "numeric_box_plots.png"),
        wrap_plots(box_plot_list, ncol=6),
        width = 30, height = 20, dpi = 300)
@@ -251,3 +251,21 @@ print(loadings_matrix3, digits=3)
 
 
 
+
+###################################################################################################################
+# Linear Regression Models #
+###################################################################################################################
+
+df$CDS_tot <- sqrt(df$CDS_total_sum)
+summary(CDS_tot)
+
+describe(df$CDS_tot)[, c("skew", "kurtosis")]
+
+distrib_plot <- ggplot(df, aes(x= df$CDS_tot)) +
+    geom_histogram(aes(y=after_stat(density)), bins=30, fill="purple4", color="white") +
+    geom_density(fill="grey", alpha = 0.5) +
+    geom_vline(xintercept = mean(df[[col]], na.rm=TRUE), linetype="dashed", color="turquoise", linewidth=1) +
+    geom_vline(xintercept = median(df[[col]], na.rm=TRUE), linetype="dotdash", color="red", linewidth=1) +
+    theme_minimal()
+
+distrib_plot
