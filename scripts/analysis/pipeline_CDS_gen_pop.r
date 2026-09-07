@@ -177,7 +177,7 @@ for (col in num_cols) {
 # Exploratory Factor Analysis #
 #############################################################################################################################
 
-########## EFA ###########
+
 items <- df %>% 
   select(all_of(CDS_items)) %>% 
   filter(complete.cases(.))
@@ -187,6 +187,20 @@ sum(is.na(items))
 
 describe(items)[, c("skew", "kurtosis")]
 
+
+########## Reliability analysis ########
+rel <- reliability(items = items, nfactors=1)
+rel
+plot(rel)
+
+### Split-half reliability CDS complete #####
+splitHalf(items)
+
+### Alpha reliability CDS complete #####
+alpha(items)
+
+
+########## EFA ###########
 ##### Assumptions ######
 
 # Multicolinearity
