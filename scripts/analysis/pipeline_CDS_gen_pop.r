@@ -383,6 +383,7 @@ print(loadings_matrix3, digits=3)
 
 # We transform the CDS total score using a squared root transformation as is is more adapted to a variable with a strong positive asymetry
 # with many zero values.
+summary(df$CDS_total_sum)
 df$CDS_tot_sqrt <- sqrt(df$CDS_total_sum)
 summary(df$CDS_tot_sqrt)
 
@@ -408,13 +409,13 @@ df$CDS_tot_log <- log1p(df$CDS_total_sum)
 ##########
 
 ### Modèle 0 ###
-Model_0 <- lm(df$CDS_tot_sqrt~1, na.action = na.exclude)
+Model_0 <- lm(CDS_tot_sqrt~1, na.action = na.exclude, data=df)
 summary(Model_0)
 
 
 
 ### Modèle 1 ###
-Model_1 <- lm(df$CDS_tot_log~df$df$ETUDE + df$AGE, na.action = na.exclude)
+Model_1 <- lm(CDS_tot_log~ AGE, na.action = na.exclude, data=df)
 summary(Model_1)
 
 # Vérification des prérequis
@@ -447,3 +448,18 @@ plot(rstandard(Model_1))
 abline(h = c(-2, 2), col="red", lty=2)
 abline(h = c(-3, 3), col="forestgreen", lty=2)
 
+# 5. Dipersion of CDS total distribution
+chi2 <- sum(residuals(Model_1, "pearson")^2)
+chi2 / df.residual(Model_1)
+1 - pchisq(chi2, df = df.residual(Model_1))
+
+
+# Assumptions are not met for classical linear regression as the model residuals are not
+# normally distibuted, present with heteroscedasticity and autocorrelation. 
+# As the model outcome (CDS total score) is overdispered and have a positively skewed
+# distribution with many 0 values, a negative binomial regression would be more adapted.
+
+############# Negative Binomial Regression ############
+library(MASS)
+Model_A <- glm.nb(CDS_total_sum ~ AGE, data=df)
+summary(Model_A)
