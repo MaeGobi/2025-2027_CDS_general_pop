@@ -4,6 +4,7 @@ library(here)
 library(dplyr)
 library(rstatix)
 library(ggplot2)
+library(ggforce)
 library(patchwork)
 library(factoextra)
 library(psych)
@@ -140,10 +141,10 @@ ggsave(here("figures", "catge_distribution_plots.png"),
 
 ######### Outliers identification #########
 
-# Visualize (boxplots)
+# Visualize (boxplots with outliers)
 box_plot_list <- lapply(num_cols, function(col) {
-  p <- ggplot(df, aes(y= .data[[col]])) +
-    geom_boxplot(outliers_color="black", outliers_size=0.5, fill="skyblue") +
+  p <- ggplot(df, aes(x = "", y= .data[[col]])) +
+    geom_boxplot(outliers = TRUE, outlier.size = 0.7, outlier.color = "grey42", fill="skyblue") +
     labs(y=col) +
     theme_light()
   return(p)
@@ -157,6 +158,92 @@ wrap_plots(box_plot_list, ncol=6)
 ggsave(here("figures", "numeric_box_plots.png"),
        wrap_plots(box_plot_list, ncol=6),
        width = 30, height = 20, dpi = 300)
+
+
+# Visualize (violin plots)
+box_violin <- lapply(num_cols, function(col) {
+  p <- ggplot(df, aes(x = "", y= .data[[col]])) +
+    geom_violin(stat = "ydensity",
+                quantile.linetype = "solid",
+                quantile.linewidth = 0.5,
+                fill="dodgerblue3", 
+                alpha=0.6, 
+                quantile.colour = "black") +
+    labs(y=col) +
+    theme_light()
+  return(p)
+})
+names(box_violin) <- num_cols
+
+# Combine all plots
+wrap_plots(box_violin, ncol=6)
+
+# Save figure
+ggsave(here("figures", "box_violin_plots.png"),
+       wrap_plots(box_violin, ncol=6),
+       width = 30, height = 20, dpi = 300)
+
+
+# Visualize (boxplots + violin plots)
+box_violin <- lapply(num_cols, function(col) {
+  p <- ggplot(df, aes(x = "", y= .data[[col]])) +
+    geom_boxplot(outliers = FALSE, fill="lightskyblue") +
+    geom_violin(fill="midnightblue", alpha=0.4) +
+    labs(y=col) +
+    theme_light()
+  return(p)
+})
+names(box_violin) <- num_cols
+
+# Combine all plots
+wrap_plots(box_violin, ncol=6)
+
+# Save figure
+ggsave(here("figures", "box_violin_plots.png"),
+       wrap_plots(box_violin, ncol=6),
+       width = 30, height = 20, dpi = 300)
+
+
+# Visualize (boxplots + dots)
+box_dots <- lapply(num_cols, function(col) {
+  p <- ggplot(df, aes(x = "", y= .data[[col]])) +
+    geom_boxplot(outliers=FALSE, fill="lightskyblue") +
+    geom_sina(color= "royalblue2", alpha = 0.5, size= 1) +
+    labs(y=col) +
+    theme_light()
+  return(p)
+})
+names(box_dots) <- num_cols
+
+# Combine all plots
+wrap_plots(box_dots, ncol=6)
+
+# Save figure
+ggsave(here("figures", "box_dots_plots.png"),
+       wrap_plots(box_dots, ncol=6),
+       width = 30, height = 20, dpi = 300)
+
+
+# Visualize (boxplots + violin plots + dots)
+box_violin_dots <- lapply(num_cols, function(col) {
+  p <- ggplot(df, aes(x = "", y= .data[[col]])) +
+    geom_boxplot(outliers=FALSE, fill="lightskyblue") +
+    geom_violin(fill="royalblue4", alpha=0.6) +
+    geom_sina(color= "royalblue2", alpha = 0.5, size= 1) +
+    labs(y=col) +
+    theme_light()
+  return(p)
+})
+names(box_violin_dots) <- num_cols
+
+# Combine all plots
+wrap_plots(box_violin_dots, ncol=6)
+
+# Save figure
+ggsave(here("figures", "box_violin_dots_plots.png"),
+       wrap_plots(box_violin_dots, ncol=6),
+       width = 30, height = 20, dpi = 300)
+
 
 # Count and identify values of outliers
 for (col in num_cols) {
@@ -215,6 +302,7 @@ mean(cor_matrix[lower.tri(cor_matrix)], na.rm = TRUE)
 
 
 # Bartlett sphericity test
+# Checks whether correlation matrix is significantly different from identity matrix
 cor_matrix <- cor(items)                                   # correlation matrix of items
 bartlett_test <- cortest.bartlett(cor_matrix, n = nrow(items))
 print(bartlett_test)
