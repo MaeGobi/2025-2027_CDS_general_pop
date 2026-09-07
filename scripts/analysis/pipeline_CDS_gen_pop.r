@@ -342,7 +342,9 @@ sum(eigenvalues > 1)   # number of eigenvalues > 1
 # Scree plot
 pca <- prcomp(items, scale. = TRUE)
 fviz_screeplot(pca, addlabels = TRUE, ncp = 10)  # show first 10 components
+ggsave(here("figures", "Screeplot.png"), width=8, height=6, dpi=300)
 # I would say 3-4 factors from the elbow on the scree plot
+
 
 # Parallel analysis
 fa.parallel(items, fm = "ml", fa = "fa", n.iter = 100, main = "Parallel Analysis Scree") 
@@ -379,16 +381,69 @@ print(loadings_matrix3, digits=3)
 # Linear Regression Models #
 ###################################################################################################################
 
-df$CDS_tot <- sqrt(df$CDS_total_sum)
-summary(CDS_tot)
+# We transform the CDS total score using a squared root transformation as is is more adapted to a variable with a strong positive asymetry
+# with many zero values.
+df$CDS_tot_sqrt <- sqrt(df$CDS_total_sum)
+summary(df$CDS_tot_sqrt)
 
-describe(df$CDS_tot)[, c("skew", "kurtosis")]
+describe(df$CDS_tot_sqrt)[, c("skew", "kurtosis")]
+shapiro.test(df$CDS_tot_sqrt)
 
-distrib_plot <- ggplot(df, aes(x= df$CDS_tot)) +
+distrib_CDS_sqrt <- ggplot(df, aes(x= CDS_tot_sqrt)) +
     geom_histogram(aes(y=after_stat(density)), bins=30, fill="purple4", color="white") +
     geom_density(fill="grey", alpha = 0.5) +
     geom_vline(xintercept = mean(df[[col]], na.rm=TRUE), linetype="dashed", color="turquoise", linewidth=1) +
     geom_vline(xintercept = median(df[[col]], na.rm=TRUE), linetype="dotdash", color="red", linewidth=1) +
+    labs(title="Distribution of transformed CDS (squared root)")
     theme_minimal()
 
-distrib_plot
+distrib_CDS_sqrt
+
+ggsave(here("figures", "distrib_CDS_transformed.png"), width=8, height=6, dpi=300)
+
+df$CDS_tot_log <- log1p(df$CDS_total_sum)
+
+########## CDS TOTAL #########
+
+##########
+
+### Modèle 0 ###
+Model_0 <- lm(df$CDS_tot_sqrt~1, na.action = na.exclude)
+summary(Model_0)
+
+
+
+### Modèle 1 ###
+Model_1 <- lm(df$CDS_tot_log~df$df$ETUDE + df$AGE, na.action = na.exclude)
+summary(Model_1)
+
+# Vérification des prérequis
+# 1. Indépendance des résidus : pas de structure particulière dans la distribution des résidus
+plot(Model_1, 1)
+# Test de durbin-watson
+library(lmtest)
+dwtest(Model_1)
+# Test de Breusch Godfrey
+library(lmtest)
+bgtest(Model_1)
+
+# 2. Homoscédasticité : test de Harrison-McCabe
+library(lmtest)
+hmctest(Model_1)
+
+# 3. Normalité
+rstandard(Model_1)
+hist(Model_1$residuals) # Histogramme des résidus standardisés
+plot(Model_1, 2) # QQplot
+
+shapiro.test(rstandard(Model_1))
+
+library(fBasics)
+dagoTest(rstandard(Model_1))
+
+# 4. Détection des valeurs atypiques et aberrantes
+# résidu std > 2 = atypique; > 3 = aberrant
+plot(rstandard(Model_1))
+abline(h = c(-2, 2), col="red", lty=2)
+abline(h = c(-3, 3), col="forestgreen", lty=2)
+
