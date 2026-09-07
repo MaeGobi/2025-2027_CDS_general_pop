@@ -86,6 +86,8 @@ df[num_cols] <- lapply(df[num_cols], function(x) as.numeric(as.character(x)))
 summary(df[num_cols])
 
 ####### Plot numerical variables distribution #######
+
+#####Classic distribution plots (histogram + density) ######
 distrib_plot_list <- lapply(num_cols, function(col) {
   p <- ggplot(df, aes(x= .data[[col]])) +
   geom_histogram(aes(y=after_stat(density)), bins=30, fill="purple4", color="white") +
@@ -102,6 +104,128 @@ wrap_plots(distrib_plot_list, ncol=6)
 # Save figure
 ggsave(here("figures", "numeric_distribution_plots.png"),
        wrap_plots(distrib_plot_list, ncol=6),
+       width = 30, height = 20, dpi = 300)
+
+
+###### Visualize (boxplots with outliers) ######
+box_plot_list <- lapply(num_cols, function(col) {
+  p <- ggplot(df, aes(x = "", y= .data[[col]])) +
+    geom_boxplot(outliers = TRUE, outlier.size = 0.7, outlier.color = "grey42", fill="skyblue") +
+    labs(y=col) +
+    theme_light()
+  return(p)
+})
+names(box_plot_list) <- num_cols
+
+# Combine all plots
+wrap_plots(box_plot_list, ncol=6)
+
+# Save figure
+ggsave(here("figures", "numeric_box_plots.png"),
+       wrap_plots(box_plot_list, ncol=6),
+       width = 30, height = 20, dpi = 300)
+
+
+
+##### Visualize (violin plots) #####
+violin <- lapply(num_cols, function(col) {
+  p <- ggplot(df, aes(x = "", y= .data[[col]])) +
+    geom_violin(stat="ydensity",
+                quantile.linetype = "dashed",
+                quantile.linewidth = 0.7,
+                fill="dodgerblue3", 
+                alpha=0.6, 
+                quantile.colour = "black") +
+    labs(y=col) +
+    theme_light()
+  return(p)
+})
+names(violin) <- num_cols
+
+# Combine all plots
+wrap_plots(violin, ncol=6)
+
+# Save figure
+ggsave(here("figures", "violin_plots.png"),
+       wrap_plots(violin, ncol=6),
+       width = 30, height = 20, dpi = 300)
+
+
+##### Visualize (boxplots + violin plots) #####
+box_violin <- lapply(num_cols, function(col) {
+  p <- ggplot(df, aes(x = "", y= .data[[col]])) +
+    geom_boxplot(outliers = FALSE, fill="lightskyblue") +
+    geom_violin(fill="midnightblue", alpha=0.4) +
+    labs(y=col) +
+    theme_light()
+  return(p)
+})
+names(box_violin) <- num_cols
+
+# Combine all plots
+wrap_plots(box_violin, ncol=6)
+
+
+###### Visualize (boxplots + violin plots_ Alternative) #####
+box_violin2 <- lapply(num_cols, function(col) {
+  p <- ggplot(df, aes(x =" ", y= .data[[col]])) +
+    geom_violin(fill="lightsteelblue2", alpha=0.7) +
+    geom_boxplot(outliers=FALSE, width = 0.1, fill="cornflowerblue") +
+    labs(x=NULL, y=col) +
+    theme_light()
+  return(p)
+})
+names(box_violin2) <- num_cols
+
+# Combine all plots
+wrap_plots(box_violin2, ncol=6)
+
+
+# Save figure
+ggsave(here("figures", "box_violin_plots2.png"),
+       wrap_plots(box_violin2, ncol=6),
+       width = 30, height = 20, dpi = 300)
+
+
+
+###### Visualize (boxplots + dots) ######
+box_dots <- lapply(num_cols, function(col) {
+  p <- ggplot(df, aes(x = "", y= .data[[col]])) +
+    geom_boxplot(outliers=FALSE, fill="lightskyblue") +
+    geom_sina(color= "royalblue2", alpha = 0.5, size= 1) +
+    labs(y=col) +
+    theme_light()
+  return(p)
+})
+names(box_dots) <- num_cols
+
+# Combine all plots
+wrap_plots(box_dots, ncol=6)
+
+# Save figure
+ggsave(here("figures", "box_dots_plots.png"),
+       wrap_plots(box_dots, ncol=6),
+       width = 30, height = 20, dpi = 300)
+
+
+##### Visualize (boxplots + violin plots + dots) #####
+box_violin_dots <- lapply(num_cols, function(col) {
+  p <- ggplot(df, aes(x = "", y= .data[[col]])) +
+    geom_boxplot(outliers=FALSE, fill="lightskyblue") +
+    geom_violin(fill="royalblue4", alpha=0.6) +
+    geom_sina(color= "royalblue2", alpha = 0.5, size= 1) +
+    labs(y=col) +
+    theme_light()
+  return(p)
+})
+names(box_violin_dots) <- num_cols
+
+# Combine all plots
+wrap_plots(box_violin_dots, ncol=6)
+
+# Save figure
+ggsave(here("figures", "box_violin_dots_plots.png"),
+       wrap_plots(box_violin_dots, ncol=6),
        width = 30, height = 20, dpi = 300)
 
 
@@ -139,112 +263,9 @@ ggsave(here("figures", "catge_distribution_plots.png"),
        width = 30, height = 20, dpi = 300)
 
 
+
+
 ######### Outliers identification #########
-
-# Visualize (boxplots with outliers)
-box_plot_list <- lapply(num_cols, function(col) {
-  p <- ggplot(df, aes(x = "", y= .data[[col]])) +
-    geom_boxplot(outliers = TRUE, outlier.size = 0.7, outlier.color = "grey42", fill="skyblue") +
-    labs(y=col) +
-    theme_light()
-  return(p)
-})
-names(box_plot_list) <- num_cols
-
-# Combine all plots
-wrap_plots(box_plot_list, ncol=6)
-
-# Save figure
-ggsave(here("figures", "numeric_box_plots.png"),
-       wrap_plots(box_plot_list, ncol=6),
-       width = 30, height = 20, dpi = 300)
-
-
-# Visualize (violin plots)
-box_violin <- lapply(num_cols, function(col) {
-  p <- ggplot(df, aes(x = "", y= .data[[col]])) +
-    geom_violin(stat = "ydensity",
-                quantile.linetype = "solid",
-                quantile.linewidth = 0.5,
-                fill="dodgerblue3", 
-                alpha=0.6, 
-                quantile.colour = "black") +
-    labs(y=col) +
-    theme_light()
-  return(p)
-})
-names(box_violin) <- num_cols
-
-# Combine all plots
-wrap_plots(box_violin, ncol=6)
-
-# Save figure
-ggsave(here("figures", "box_violin_plots.png"),
-       wrap_plots(box_violin, ncol=6),
-       width = 30, height = 20, dpi = 300)
-
-
-# Visualize (boxplots + violin plots)
-box_violin <- lapply(num_cols, function(col) {
-  p <- ggplot(df, aes(x = "", y= .data[[col]])) +
-    geom_boxplot(outliers = FALSE, fill="lightskyblue") +
-    geom_violin(fill="midnightblue", alpha=0.4) +
-    labs(y=col) +
-    theme_light()
-  return(p)
-})
-names(box_violin) <- num_cols
-
-# Combine all plots
-wrap_plots(box_violin, ncol=6)
-
-# Save figure
-ggsave(here("figures", "box_violin_plots.png"),
-       wrap_plots(box_violin, ncol=6),
-       width = 30, height = 20, dpi = 300)
-
-
-# Visualize (boxplots + dots)
-box_dots <- lapply(num_cols, function(col) {
-  p <- ggplot(df, aes(x = "", y= .data[[col]])) +
-    geom_boxplot(outliers=FALSE, fill="lightskyblue") +
-    geom_sina(color= "royalblue2", alpha = 0.5, size= 1) +
-    labs(y=col) +
-    theme_light()
-  return(p)
-})
-names(box_dots) <- num_cols
-
-# Combine all plots
-wrap_plots(box_dots, ncol=6)
-
-# Save figure
-ggsave(here("figures", "box_dots_plots.png"),
-       wrap_plots(box_dots, ncol=6),
-       width = 30, height = 20, dpi = 300)
-
-
-# Visualize (boxplots + violin plots + dots)
-box_violin_dots <- lapply(num_cols, function(col) {
-  p <- ggplot(df, aes(x = "", y= .data[[col]])) +
-    geom_boxplot(outliers=FALSE, fill="lightskyblue") +
-    geom_violin(fill="royalblue4", alpha=0.6) +
-    geom_sina(color= "royalblue2", alpha = 0.5, size= 1) +
-    labs(y=col) +
-    theme_light()
-  return(p)
-})
-names(box_violin_dots) <- num_cols
-
-# Combine all plots
-wrap_plots(box_violin_dots, ncol=6)
-
-# Save figure
-ggsave(here("figures", "box_violin_dots_plots.png"),
-       wrap_plots(box_violin_dots, ncol=6),
-       width = 30, height = 20, dpi = 300)
-
-
 # Count and identify values of outliers
 for (col in num_cols) {
   out_values <- boxplot.stats(df[[col]])$out
