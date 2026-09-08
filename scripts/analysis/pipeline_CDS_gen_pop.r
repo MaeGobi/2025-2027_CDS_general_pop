@@ -8,6 +8,10 @@ library(ggforce)
 library(patchwork)
 library(factoextra)
 library(psych)
+library(MASS)
+library(stargazer)
+library(pscl)
+library(sjPlot)
 
 ######### Charge and visualize dataset ##########
 
@@ -37,6 +41,7 @@ df$MIGRAINE <- factor(df$MIGRAINE)
 table(df$MIGRAINE, useNA = "ifany")
 levels(df$MIGRAINE)
 
+df$SEXE <- relevel(factor(df$SEXE), ref="h")
 ########## Preprocessing ##########
 # NaN inspection
 
@@ -467,7 +472,6 @@ chi2 / df.residual(Model_1)
 
 ############# Negative Binomial Regression ############
 ###### Evaluation of model validity ######
-library(MASS)
 Model_A <- glm.nb(CDS_total_sum ~ AGE, data=df, na.action = na.exclude)
 summary(Model_A)
 exp(coef(Model_A))
@@ -530,29 +534,24 @@ summary(Model_E)
 exp(coef(Model_E))
 
 
-aov_mod <- anova(Model_A, Model_B, Model_C, Model_C2, Model_D, Model_E, test="ChiSq")
+# Statistical comparison of hierarchical models, (chi squared)
+aov_mod <- anova(Model_nul, Model_A, Model_B, Model_C, Model_C2, Model_D, Model_E, test="ChiSq")
 print(aov_mod)
 
-AIC(Model_A, Model_B, Model_C, Model_C2, Model_D, Model_E)
-BIC(Model_A, Model_B, Model_C, Model_C2, Model_D, Model_E)
-
-
-library(stargazer)
-
+# Summary table of models coefficients 
 stargazer(Model_A, Model_B, Model_C, Model_C2, Model_D, Model_E,
           type = "text",
-          title = "Modèles de régression hiérarchique (binomiale négative)",
+          title = "Hierarchical Regression Models (Negative Binomial Regression",
           dep.var.labels = "Score CDS total",
           column.labels = c("A", "B", "C", "C2", "D", "E"),
-          apply.coef = exp,  # affiche les coefficients exponentiés (IRR)
+          apply.coef = exp,  # IRR (exp(coef))
           p.auto = TRUE,
           star.cutoffs = c(0.05, 0.01, 0.001),
           digits = 3,
-          out = here("figures", "tableau_modeles_hierarchiques.doc"))
+          out = here("figures", "coef_hierarchical_models.txt"))
 
-library(pscl)
-
-models_list <- list(Model_A = Model_A, Model_B = Model_B, Model_C = Model_C, 
+# Summary table of models metrics
+models_list <- list(Model_nul = Model_nul, Model_A = Model_A, Model_B = Model_B, Model_C = Model_C, 
                     Model_C2 = Model_C2, Model_D = Model_D, Model_E = Model_E)
 
 comparison_df <- data.frame(
@@ -564,3 +563,17 @@ comparison_df <- data.frame(
 )
 
 print(comparison_df)
+
+
+# Global summary table of all models (exportation, article ready)
+tab_model(Model_A, Model_B, Model_C, Model_C2, Model_D, Model_E,
+          show.aic = TRUE,
+          transform = "exp",
+          dv.labels = c("Model A", "Model B", "Model C", "Model C2", "Model D", "Model E"),
+          pred.labels = c("(Intercept)" = "Intercept",
+                          "AGE" = "Age",
+                          "SEXEh" = "Sex (Man)",
+                          "ANXIETE_recoded" = "Anxiety (HADS-A)",
+                          "DEPRESSION_recoded" = "Depression (HADS-D)",
+                          "MIGRAINEoui" = "Migraine (Yes)"),
+          file = here("Figures", "tableau_modeles.doc"))
