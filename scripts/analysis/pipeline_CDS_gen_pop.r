@@ -455,11 +455,29 @@ chi2 / df.residual(Model_1)
 
 
 # Assumptions are not met for classical linear regression as the model residuals are not
-# normally distibuted, present with heteroscedasticity and autocorrelation. 
-# As the model outcome (CDS total score) is overdispered and have a positively skewed
+# normally distributed, present with heteroscedasticity and autocorrelation. 
+# As the model outcome (CDS total score) is overdispersed and have a positively skewed
 # distribution with many 0 values, a negative binomial regression would be more adapted.
 
 ############# Negative Binomial Regression ############
 library(MASS)
 Model_A <- glm.nb(CDS_total_sum ~ AGE, data=df)
 summary(Model_A)
+exp(coef(Model_A))
+
+# For negative binomial regression, the coefficients are interpreted after being exponentiated
+# The exp(coef) is the IRR (Incidence Ratios Rate), intepreted as a % of increase 
+# (e.g. : IRR = 1.15 : 15% of increase; IRR = 0.85 : 15% of decrease)
+# The theta parameter corresponds to distribution dispersion. For a Poisson distribution, it
+# tends to + infinite. The closer it is to 0, the more it corresponds to a negative 
+# binomial distribution. The standard error gives the precision of estimation of theta.
+# The smaller it is, the best is the theta estimate.
+# To confirm the advantage of negative binomial regression over a Poisson regression
+# (used for count data but normally dispersed), we have to compare the two models. 
+# We use AIC and BIC indicators, as well as a chi-square to compare the fitting of both
+# models on the data.
+
+poisson_A <- glm(CDS_total_sum ~ AGE, data=df)
+summary(poisson_A)
+AIC(poisson_A, Model_A)
+pchisq(2 * (logLik(Model_A) - logLik(poisson_A)), df = 1, lower.tail = FALSE) / 2
