@@ -122,7 +122,7 @@ ggsave(here("figures", "numeric_distribution_plots.png"),
 box_plot_list <- lapply(num_cols, function(col) {
   p <- ggplot(df, aes(x = "", y= .data[[col]])) +
     geom_boxplot(outliers = TRUE, outlier.size = 0.7, outlier.color = "grey42", fill="skyblue") +
-    labs(y=col) +
+    labs(x=NULL, y=col) +
     theme_light()
   return(p)
 })
@@ -147,7 +147,7 @@ violin <- lapply(num_cols, function(col) {
                 fill="dodgerblue3", 
                 alpha=0.6, 
                 quantile.colour = "black") +
-    labs(y=col) +
+    labs(x=NULL, y=col) +
     theme_light()
   return(p)
 })
@@ -167,7 +167,7 @@ box_violin <- lapply(num_cols, function(col) {
   p <- ggplot(df, aes(x = "", y= .data[[col]])) +
     geom_boxplot(outliers = FALSE, fill="lightskyblue") +
     geom_violin(fill="midnightblue", alpha=0.4) +
-    labs(y=col) +
+    labs(x=NULL, y=col) +
     theme_light()
   return(p)
 })
@@ -204,7 +204,7 @@ box_dots <- lapply(num_cols, function(col) {
   p <- ggplot(df, aes(x = "", y= .data[[col]])) +
     geom_boxplot(outliers=FALSE, fill="lightskyblue") +
     geom_sina(color= "royalblue2", alpha = 0.5, size= 1) +
-    labs(y=col) +
+    labs(x=NULL, y=col) +
     theme_light()
   return(p)
 })
@@ -225,7 +225,7 @@ box_violin_dots <- lapply(num_cols, function(col) {
     geom_boxplot(outliers=FALSE, fill="lightskyblue") +
     geom_violin(fill="royalblue4", alpha=0.6) +
     geom_sina(color= "royalblue2", alpha = 0.5, size= 1) +
-    labs(y=col) +
+    labs(x=NULL, y=col) +
     theme_light()
   return(p)
 })
@@ -295,10 +295,8 @@ for (col in num_cols) {
 #############################################################################################################################
 # Exploratory Factor Analysis #
 #############################################################################################################################
-
-
 items <- df %>% 
-  select(all_of(CDS_items)) %>% 
+  dplyr::select(all_of(CDS_items)) %>% 
   filter(complete.cases(.))
 summary(items)
 sum(is.na(items))
@@ -321,6 +319,11 @@ alpha(items)
 
 ########## EFA ###########
 ##### Assumptions ######
+# Polychoric Correlation Matrix
+poly_cor <- polychoric(items, na.rm=TRUE, max.cat = 12)
+poly_matrix <- poly_cor$rho
+
+
 
 # Multicolinearity
 
@@ -363,11 +366,54 @@ fa.parallel(items, fm = "ml", fa = "fa", n.iter = 100, main = "Parallel Analysis
 
 
 #### EFA with 3 factors and promax rotation (correlated factors)
-efa1_result <- fa(items, nfactors = 3, rotate = "promax", fm = "ml")
+efa1_result <- fa(items, nfactors = 3, rotate = "promax", fm = "wls", cor="poly", cor.args = list(max.cat = 12))
 print(efa1_result$loadings, cutoff = 0.4, digits = 3)
 
 loadings_matrix1 <- unclass(efa1_result$loadings)
 print(loadings_matrix1, digits=3)
+
+#### EFA with 3 factors and promax rotation (correlated factors) _ Lavaan
+library(psych)
+
+
+library(EFAtools)
+
+# Lancer l'analyse parallèle adaptée aux données ordinales/non-normales
+# type = "XG" utilise la méthode de Goerz qui est ultra-résiliente
+ap_result <- PARALLEL(items, 
+                      N = nrow(items), 
+                      data_gender = "none", 
+                      engine = "EFAtools",
+                      plot = TRUE)
+
+ap_result
+
+
+library(lavaan)
+
+fit_efa <- efa(data = items,
+               nfactors = 3, 
+               rotation = "promax",
+               estimator = "WLSMV",
+               ordered=TRUE)
+
+
+summary(fit_efa, standardized=TRUE, cutoff=0.4)
+
+
+fit_multi <- efa(data = items,
+                 nfactors = 3:7, 
+                 rotation = "promax",
+                 estimator = "WLSMV",
+                 ordered=TRUE)
+
+
+summary(fit_multi, standardized=TRUE, cutoff=0.4, fit.measures=TRUE)
+
+# Comparaison directe des modèles via un test de rapport de vraisemblance robuste
+lavTestLRT(fit_multi)
+# Extraire uniquement les indicateurs clés pour vos modèles ordonnés
+fitMeasures(fit_multi, c("chisq.scaled", "df.scaled", "cfi", "tli", "rmsea"))
 
 
 #### EFA with 4 factors and promax rotation (correlated factors)  
