@@ -31,6 +31,12 @@ df <- df_raw2[inclus,]
 nrow(df)
 as.data.frame(table(df$Difference_sum))
 
+df$MIGRAINE[df$MIGRAINE == ""] <- NA
+df$MIGRAINE <- factor(df$MIGRAINE)
+
+table(df$MIGRAINE, useNA = "ifany")
+levels(df$MIGRAINE)
+
 ########## Preprocessing ##########
 # NaN inspection
 
@@ -460,8 +466,9 @@ chi2 / df.residual(Model_1)
 # distribution with many 0 values, a negative binomial regression would be more adapted.
 
 ############# Negative Binomial Regression ############
+###### Evaluation of model validity ######
 library(MASS)
-Model_A <- glm.nb(CDS_total_sum ~ AGE, data=df)
+Model_A <- glm.nb(CDS_total_sum ~ AGE, data=df, na.action = na.exclude)
 summary(Model_A)
 exp(coef(Model_A))
 
@@ -477,7 +484,83 @@ exp(coef(Model_A))
 # We use AIC and BIC indicators, as well as a chi-square to compare the fitting of both
 # models on the data.
 
-poisson_A <- glm(CDS_total_sum ~ AGE, data=df)
+poisson_A <- glm(CDS_total_sum ~ AGE, data=df, na.action = na.exclude)
 summary(poisson_A)
 AIC(poisson_A, Model_A)
 pchisq(2 * (logLik(Model_A) - logLik(poisson_A)), df = 1, lower.tail = FALSE) / 2
+# The results confirm that the negative binomial distribution is better adapted to our data
+# than a poisson distribution (AIC negative binomial < AIC Poisson, significant X² test).
+
+###### Hierarchical Negative Binomial Regression Models ######
+#### Null model ###
+Model_nul <- glm.nb(CDS_total_sum ~ 1, data=df, na.action = na.exclude)
+summary(Model_nul)
+exp(coef(Model_nul))
+
+### Model A : CDS <- Age ###
+Model_A <- glm.nb(CDS_total_sum ~ AGE, data=df, na.action = na.exclude)
+summary(Model_A)
+exp(coef(Model_A))
+
+### Model B : CDS <- Age + Sex ###
+Model_B <- glm.nb(CDS_total_sum ~ AGE + SEXE, data=df, na.action = na.exclude)
+summary(Model_B)
+exp(coef(Model_B))
+
+### Model C : CDS <- Age + Sex + Anxiety ###
+Model_C <- glm.nb(CDS_total_sum ~ AGE + SEXE + ANXIETE_recoded, data=df, na.action = na.exclude)
+summary(Model_C)
+exp(coef(Model_C))
+
+
+### Model C' : CDS <- Age + Sex + Depression ###
+Model_C2 <- glm.nb(CDS_total_sum ~ AGE + SEXE + DEPRESSION_recoded, data=df, na.action = na.exclude)
+summary(Model_C2)
+exp(coef(Model_C2))
+
+
+### Model D : CDS <- Age + Sex + Anxiety + Depression ###
+Model_D <- glm.nb(CDS_total_sum ~ AGE + SEXE + ANXIETE_recoded + DEPRESSION_recoded, data=df, na.action = na.exclude)
+summary(Model_D)
+exp(coef(Model_D))
+
+### Model E : CDS <- Age + Sex + Anxiety + Depression + MIGRAINE ###
+Model_E <- glm.nb(CDS_total_sum ~ AGE + SEXE + ANXIETE_recoded + DEPRESSION_recoded + MIGRAINE, data=df, na.action = na.exclude)
+summary(Model_E)
+exp(coef(Model_E))
+
+
+aov_mod <- anova(Model_A, Model_B, Model_C, Model_C2, Model_D, Model_E, test="ChiSq")
+print(aov_mod)
+
+AIC(Model_A, Model_B, Model_C, Model_C2, Model_D, Model_E)
+BIC(Model_A, Model_B, Model_C, Model_C2, Model_D, Model_E)
+
+
+library(stargazer)
+
+stargazer(Model_A, Model_B, Model_C, Model_C2, Model_D, Model_E,
+          type = "text",
+          title = "Modèles de régression hiérarchique (binomiale négative)",
+          dep.var.labels = "Score CDS total",
+          column.labels = c("A", "B", "C", "C2", "D", "E"),
+          apply.coef = exp,  # affiche les coefficients exponentiés (IRR)
+          p.auto = TRUE,
+          star.cutoffs = c(0.05, 0.01, 0.001),
+          digits = 3,
+          out = here("figures", "tableau_modeles_hierarchiques.doc"))
+
+library(pscl)
+
+models_list <- list(Model_A = Model_A, Model_B = Model_B, Model_C = Model_C, 
+                    Model_C2 = Model_C2, Model_D = Model_D, Model_E = Model_E)
+
+comparison_df <- data.frame(
+  Modele = names(models_list),
+  AIC = sapply(models_list, AIC),
+  LogLik = sapply(models_list, function(m) as.numeric(logLik(m))),
+  Theta = sapply(models_list, function(m) m$theta),
+  PseudoR2_McFadden = sapply(models_list, function(m) pR2(m)["McFadden"])
+)
+
+print(comparison_df)
