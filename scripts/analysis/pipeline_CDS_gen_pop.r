@@ -366,7 +366,7 @@ fa.parallel(items, fm = "ml", fa = "fa", n.iter = 100, main = "Parallel Analysis
 
 
 #### EFA with 3 factors and promax rotation (correlated factors)
-efa1_result <- fa(items, nfactors = 3, rotate = "promax", fm = "wls", cor="poly", cor.args = list(max.cat = 12))
+efa1_result <- fa(items, nfactors = 3, rotate = "promax", fm = "minres")
 print(efa1_result$loadings, cutoff = 0.4, digits = 3)
 
 loadings_matrix1 <- unclass(efa1_result$loadings)
@@ -441,6 +441,8 @@ print(loadings_matrix3, digits=3)
 # We transform the CDS total score using a squared root transformation as is is more adapted to a variable with a strong positive asymetry
 # with many zero values.
 summary(df$CDS_total_sum)
+describe(df$CDS_total_sum)
+
 df$CDS_tot_sqrt <- sqrt(df$CDS_total_sum)
 summary(df$CDS_tot_sqrt)
 
