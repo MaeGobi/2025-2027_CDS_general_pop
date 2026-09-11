@@ -42,6 +42,7 @@ table(df$MIGRAINE, useNA = "ifany")
 levels(df$MIGRAINE)
 
 df$SEXE <- relevel(factor(df$SEXE), ref="h")
+levels(df$SEXE)
 ########## Preprocessing ##########
 # NaN inspection
 
@@ -95,6 +96,8 @@ num_cols <- c("AGE", "CDS1", "CDS2","CDS3", "CDS4", "CDS5", "CDS6", "CDS7", "CDS
 df[num_cols] <- lapply(df[num_cols], function(x) as.numeric(as.character(x)))
 
 summary(df[num_cols])
+
+describe(df$CDS_total_sum)
 
 ####### Plot numerical variables distribution #######
 
@@ -302,8 +305,42 @@ summary(items)
 sum(is.na(items))
 
 
+describe(items)
 describe(items)[, c("skew", "kurtosis")]
 
+# Number of observations per item category (score)
+sapply(items, table)
+# Percentage of zeros for each item
+pct_zero <- sapply(items, function(x) mean(x == 0, na.rm = TRUE) * 100)
+pct_zero_df <- data.frame(item = names(pct_zero), pct_zero = round(pct_zero, 1)) |>
+  arrange(desc(pct_zero))
+print(pct_zero_df)
+# Percentage of zeros extremely high (>95%) for items 19, 12, 20 and 27, with really restricted variance and extremely asymetric distribution (skewness)
+
+# Number of categories used in each itemm
+n_categories <- sapply(items, function(x) length(unique(na.omit(x))))
+print(n_categories)
+
+min_nonzero_n <- sapply(items, function(x) {
+  tab <- table(x)
+  tab <- tab[names(tab) != "0"]
+  if (length(tab) == 0) return(NA)
+  min(tab)
+})
+print(sort(min_nonzero_n))
+
+# Items à signaler : >90% de zéros ET plus petite catégorie non-nulle < 10
+items_a_risque <- names(items)[pct_zero > 90 & min_nonzero_n < 10]
+cat("Items à examiner en priorité :\n")
+print(items_a_risque)
+
+
+if (length(items_a_risque) >= 2) {
+  combn(items_a_risque, 2, FUN = function(pair) {
+    cat("\n---", pair[1], "x", pair[2], "---\n")
+    print(table(items[[pair[1]]], items[[pair[2]]]))
+  })
+}
 
 ########## Reliability analysis ########
 rel <- reliability(items = items, nfactors=1)
@@ -319,8 +356,59 @@ alpha(items)
 
 ########## EFA ###########
 ##### Assumptions ######
+
+cor_pearson <- cor(
+  items,
+  use = "pairwise.complete.obs",
+  method = "pearson"
+)
+cor_pearson
+
+cor_spearman <- cor(
+  items,
+  use = "pairwise.complete.obs",
+  method = "spearman"
+)
+cor_spearman
+
+fa.parallel(
+  cor_pearson,
+  n.obs = nrow(items),
+  fa = "fa",
+  fm = "minres"
+)
+
+fa.parallel(
+  cor_spearman,
+  n.obs = nrow(items),
+  fa = "fa",
+  fm = "minres"
+)
+
+efa_P <- fa(
+  cor_pearson,
+  nfactors = 3,
+  n.obs = nrow(items),
+  fm = "minres",
+  rotate = "oblimin"
+)
+
+efa_S <- fa(
+  cor_spearman,
+  nfactors = 3,
+  n.obs = nrow(items),
+  fm = "minres",
+  rotate = "oblimin"
+)
+
+print(efa_P$loadings, cutoff = .40)
+print(efa_S$loadings, cutoff = .40)
+
+efa_P$communality
+efa_S$communality
+
 # Polychoric Correlation Matrix
-poly_cor <- polychoric(items, na.rm=TRUE, max.cat = 12)
+poly_cor <- polychoric(items, max.cat = 12, smooth=TRUE)
 poly_matrix <- poly_cor$rho
 
 
@@ -581,6 +669,13 @@ Model_E <- glm.nb(CDS_total_sum ~ AGE + SEXE + ANXIETE_recoded + DEPRESSION_reco
 summary(Model_E)
 exp(coef(Model_E))
 
+# Assumptions verification
+# Calculer les résidus simulés adaptés au Hurdle
+residus_Model_E <- Model_E$residuals
+
+# Tracer les graphiques de diagnostic (recherche de patterns aberrants)
+plot(residus_Model_E)
+
 
 # Statistical comparison of hierarchical models, (chi squared)
 aov_mod <- anova(Model_nul, Model_A, Model_B, Model_C, Model_C2, Model_D, Model_E, test="ChiSq")
@@ -621,6 +716,272 @@ tab_model(Model_A, Model_B, Model_C, Model_C2, Model_D, Model_E,
           pred.labels = c("(Intercept)" = "Intercept",
                           "AGE" = "Age",
                           "SEXEh" = "Sex (Man)",
+                          "ANXIETE_recoded" = "Anxiety (HADS-A)",
+                          "DEPRESSION_recoded" = "Depression (HADS-D)",
+                          "MIGRAINEoui" = "Migraine (Yes)"),
+          file = here("Figures", "tableau_modeles.doc"))
+
+
+
+
+############ Hurdle Regression ############
+anxdep <- c("ANXIETE_recoded", "DEPRESSION_recoded", "MIGRAINE")
+df2 <- df[complete.cases(df[, anxdep]), ]
+nrow(df2)
+
+scores_pos <- df2$CDS_total_sum[df2$CDS_total_sum > 0]
+df_pos <- data.frame(scores_pos=scores_pos)
+
+
+CDS_tot_distrib <- ggplot(data=df2, aes(x=CDS_total_sum)) +
+  geom_histogram(aes(y=after_stat(density)), bins=30, fill="purple4", color="white") +
+  geom_density(fill="grey", alpha = 0.5) +
+  geom_vline(xintercept = mean(df$CDS_total_sum, na.rm=TRUE), linetype="dashed", color="turquoise", linewidth=1) +
+  geom_vline(xintercept = median(df$CDS_total_sum, na.rm=TRUE), linetype="dotdash", color="red", linewidth=1) +
+  theme_minimal()
+
+CDS_pos <- ggplot(data=df_pos, aes(x=scores_pos)) +
+  geom_histogram(aes(y=after_stat(density)), bins=30, fill="purple4", color="white") +
+  geom_density(fill="grey", alpha = 0.5) +
+  geom_vline(xintercept = mean(df_pos$scores_pos, na.rm=TRUE), linetype="dashed", color="turquoise", linewidth=1) +
+  geom_vline(xintercept = median(df_pos$scores_pos, na.rm=TRUE), linetype="dotdash", color="red", linewidth=1) +
+  theme_minimal()
+
+
+CDS_distrib <- CDS_tot_distrib+CDS_pos
+CDS_distrib
+
+
+# Fitting of CDS (only scores > 0) distribution
+library(fitdistrplus)
+
+fit_lognorm <- fitdist(scores_pos, "lnorm")
+fit_gamma <- fitdist(scores_pos, "gamma")
+fit_binom <- fitdist(scores_pos, "nbinom")
+
+summary(fit_lognorm)
+summary(fit_gamma)
+summary(fit_binom)
+gofstat(list(fit_lognorm, fit_gamma, fit_binom), fitnames = c("Log-Normal", "Gamma", "Binomial"))
+
+# QQ plot for log normal and gamma distribution compared to the distribution of CDS with positive values
+plot.legend <- c("Log-normale", "Gamma", "Binomial")
+denscomp(list(fit_lognorm, fit_gamma, fit_binom), legendtext = plot.legend)
+qqcomp(list(fit_lognorm, fit_gamma, fit_binom), legendtext = plot.legend)
+
+# The AIC and BIC differences between log normal and gamma are > 10, meaning that Log Normal has the best fit for our CDS positive value.
+# This is visually confirmed by the QQ plot
+
+
+
+# Hurdle model
+library(glmmTMB)
+library(DHARMa)
+
+# Model description :
+# First row = intensity model (lognormal)
+# zi = binary model (log)
+#family = distibution
+
+#### Model 0 = Null Model #####
+M0 <- glmmTMB(
+  CDS_total_sum ~ 1,
+  zi = ~ 1,
+  family=truncated_nbinom2(),
+  data=df2)
+
+summary(M0)
+
+# Exponential transformation of coefficients to interpret them as OR
+# For the binary effect (probability to have 0 = no symtpom at all)
+exp(fixef(M0)$zi)
+# For the insensity effect : regression on severity of reported symptoms
+exp(fixef(M0)$cond)
+
+# Assumptions verification
+# Compute simulated residuals for Hurdle model
+residus_M0 <- simulateResiduals(fittedModel = M0)
+
+# Assumptions plot (distribution, homoscedasticity, dispersion)
+plot(residus_M0)
+
+
+
+
+#### Model 1 : CDS ~AGE ####
+M1 <- glmmTMB(
+  CDS_total_sum ~ AGE,
+  zi = ~ AGE,
+  family=truncated_nbinom2(),
+  data=df2)
+
+summary(M1)
+
+# Exponential transformation of coefficients to interpret them as OR
+# For the binary effect (probability to have 0 = no symptom at all)
+exp(fixef(M1)$zi)
+# For the intensity effect : regression on severity of reported symptoms
+exp(fixef(M1)$cond)
+
+# Assumptions verification
+# Compute simulated residuals for Hurdle model
+residus_M1 <- simulateResiduals(fittedModel = M1)
+
+# Assumptions plot (distribution, homoscedasticity, dispersion)
+plot(residus_M1)
+testDispersion(M1)
+
+
+
+#### Model 2 : CDS ~AGE+SEX ####
+M2 <- glmmTMB(
+  CDS_total_sum ~ AGE+SEXE,
+  zi = ~ AGE+SEXE,
+  family=truncated_nbinom2(),
+  data=df2)
+
+summary(M2)
+
+# Exponential transformation of coefficients to interpret them as OR
+# For the binary effect (probability to have 0 = no symptom at all)
+exp(fixef(M2)$zi)
+# For the intensity effect : regression on severity of reported symptoms
+exp(fixef(M2)$cond)
+
+
+# Assumptions verification
+# Compute simulated residuals for Hurdle model
+residus_M2 <- simulateResiduals(fittedModel = M2)
+
+# Assumptions plot (distribution, homoscedasticity, dispersion)
+plot(residus_M2)
+testDispersion(M2)
+
+
+#### Model 3 : CDS ~AGE+SEX+ANXIETY #####
+M3 <- glmmTMB(
+  CDS_total_sum ~ AGE+SEXE+ANXIETE_recoded,
+  zi = ~ AGE+SEXE+ANXIETE_recoded,
+  family=truncated_nbinom2(),
+  data=df2)
+
+summary(M3)
+
+# Exponential transformation of coefficients to interpret them as OR
+# For the binary effect (probability to have 0 = no symptom at all)
+exp(fixef(M3)$zi)
+# For the intensity effect : regression on severity of reported symptoms
+exp(fixef(M3)$cond)
+
+
+# Assumptions verification
+# Compute simulated residuals for Hurdle model
+residus_M3 <- simulateResiduals(fittedModel = M3)
+
+# Assumptions plot (distribution, homoscedasticity, dispersion)
+plot(residus_M3)
+testDispersion(M3)
+
+
+
+#### Model 3bis : CDS ~AGE+SEX+ANXIETY+DEPRESSION ####
+M3b <- glmmTMB(
+  CDS_total_sum ~ AGE+SEXE+DEPRESSION_recoded,
+  zi = ~ AGE+SEXE+DEPRESSION_recoded,
+  family=truncated_nbinom2(),
+  data=df2)
+
+summary(M3b)
+
+# Exponential transformation of coefficients to interpret them as OR
+# For the binary effect (probability to have 0 = no symptom at all)
+exp(fixef(M3b)$zi)
+# For the intensity effect : regression on severity of reported symptoms
+exp(fixef(M3b)$cond)
+
+
+# Assumptions verification
+# Compute simulated residuals for Hurdle model
+residus_M3b <- simulateResiduals(fittedModel = M3b)
+
+# Assumptions plot (distribution, homoscedasticity, dispersion)
+plot(residus_M3b)
+testDispersion(M3b)
+
+
+
+#### Model 4 : CDS ~AGE+SEX+ANXIETY+DEPRESSION ####
+M4 <- glmmTMB(
+  CDS_total_sum ~ AGE+SEXE+ANXIETE_recoded+DEPRESSION_recoded,
+  zi = ~ AGE+SEXE+ANXIETE_recoded+DEPRESSION_recoded,
+  family=truncated_nbinom2(),
+  data=df2)
+
+summary(M4)
+
+# Exponential transformation of coefficients to interpret them as OR
+# For the binary effect (probability to have 0 = no symptom at all)
+exp(fixef(M4)$zi)
+# For the intensity effect : regression on severity of reported symptoms
+exp(fixef(M4)$cond)
+
+
+# Assumptions verification
+# Compute simulated residuals for Hurdle model
+residus_M4 <- simulateResiduals(fittedModel = M4)
+
+# Assumptions plot (distribution, homoscedasticity, dispersion)
+plot(residus_M4)
+testDispersion(M4)
+
+
+
+
+#### Model 5 : CDS ~AGE+SEX+ANXIETY+DEPRESSION+MIGRAINE ####
+M5 <- glmmTMB(
+  CDS_total_sum ~ AGE+SEXE+ANXIETE_recoded+DEPRESSION_recoded+MIGRAINE,
+  zi = ~ AGE+SEXE+ANXIETE_recoded+DEPRESSION_recoded+MIGRAINE,
+  family=truncated_nbinom2(),
+  data=df2)
+
+summary(M5)
+
+# Exponential transformation of coefficients to interpret them as OR
+# For the binary effect (probability to have 0 = no symptom at all)
+exp(fixef(M5)$zi)
+# For the intensity effect : regression on severity of reported symptoms
+exp(fixef(M5)$cond)
+
+
+# Assumptions verification
+# Compute simulated residuals for hurdle model
+residus_M5 <- simulateResiduals(fittedModel = M5)
+
+# Assumptions plot (distribution, homoscedasticity, dispersion)
+plot(residus_M5)
+testDispersion(M5)
+
+
+################## Assumptions for all models #########################################
+# For the QQ plot, the observed values perfectly follow the predicted values and the Kolmogorov-Smirnov test of deviation from the theoretical distribution is
+# non significant, meaning that the residuals follow the expected distribution.
+# The residuals vs predictions graphs indicate that homoscedasticity is respected. This is confirmed by the
+# combined adjusted quantile test, that is non significant.
+# The outlier test is non significant, confirming the absence of aberrant values.
+# The dispersion test is non significant, indicating a correctly predicted dispersion.
+
+######## Models comparison #############
+anova(M1, M2, M3, M3b, M4, M5)
+
+# Global summary table of all models (exportation, article ready)
+tab_model(M1, M2, M3, M3b, M4, M5,
+          show.aic = TRUE,
+          show.zeroinf = TRUE,
+          show.intercept = FALSE,
+          transform = "exp",
+          dv.labels = c("Model 1", "Model 2", "Model 3", "Model 3Bis", "Model 4", "Model 5"),
+          pred.labels = c("AGE" = "Age",
+                          "SEXEf" = "Sex (Woman)",
                           "ANXIETE_recoded" = "Anxiety (HADS-A)",
                           "DEPRESSION_recoded" = "Depression (HADS-D)",
                           "MIGRAINEoui" = "Migraine (Yes)"),
