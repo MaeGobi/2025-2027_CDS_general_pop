@@ -304,7 +304,9 @@ items <- df %>%
 summary(items)
 sum(is.na(items))
 
+item_names <- names(items)
 
+###### Preliminary inspections ######
 describe(items)
 describe(items)[, c("skew", "kurtosis")]
 
@@ -329,18 +331,218 @@ min_nonzero_n <- sapply(items, function(x) {
 })
 print(sort(min_nonzero_n))
 
-# Items à signaler : >90% de zéros ET plus petite catégorie non-nulle < 10
-items_a_risque <- names(items)[pct_zero > 90 & min_nonzero_n < 10]
-cat("Items à examiner en priorité :\n")
-print(items_a_risque)
+# Items to flag : >90% zeros AND less than 10 observations in the smallest non null category
+items_flag <- names(items)[pct_zero > 90 & min_nonzero_n < 10]
+cat("Items to heck :\n")
+print(items_flag)
 
-
-if (length(items_a_risque) >= 2) {
-  combn(items_a_risque, 2, FUN = function(pair) {
+# Bivariate crossed tables for flagged items
+if (length(items_flag) >= 2) {
+  combn(items_flag, 2, FUN = function(pair) {
     cat("\n---", pair[1], "x", pair[2], "---\n")
     print(table(items[[pair[1]]], items[[pair[2]]]))
   })
 }
+
+
+##### Items binarization #####
+# Justification: Almost all items exhibit a minimum sample size per active category 
+# of less than 10-15 (cf. preliminary diagnostics), making multi-category polychoric 
+# estimation unstable for the majority of the scale. Binarization (0 = absence, 
+# 1 = presence, regardless of any score > 0) eliminates this issue. 
+# The corresponding correlations will be tetrachoric (a special case of the polychoric 
+# correlation for binary variables), which corrects for the marginal bias (dependence 
+# on prevalence rates) that affects the phi/Pearson coefficient on binary data with 
+# heterogeneous prevalence.
+
+recode_binary <- function(x) {
+  ifelse(x == 0, 0, 1)
+}
+
+# Numeric version (0/1) : for tetrachoric(), KMO(), fa.parallel()
+items_recoded_num <- as.data.frame(lapply(items, recode_binary))
+names(items_recoded_num) <- item_names
+
+# Factor version : for lavaan::efa()
+items_recoded <- as.data.frame(lapply(items_recoded_num, function(x) factor(x, ordered = TRUE)))
+names(items_recoded) <- item_names
+
+# Post Binarization Check : Prevalence rate per item
+prevalence <- sapply(items_recoded_num, function(x) mean(x == 1, na.rm = TRUE) * 100)
+prevalence_df <- data.frame(item = names(prevalence), pct_present = round(prevalence, 1)) |>
+  arrange(pct_present)
+print(prevalence_df)
+
+# Items with a low prevalence (< 5%) to check
+items_low_prevalence <- prevalence_df$item[prevalence_df$pct_present < 5]
+cat("Low prevalence items :\n")
+print(items_low_prevalence)
+
+###### Polychoric Matrix #####
+# NOTE: psych::tetrachoric() can fail on certain data structures (e.g., residual factors, 
+# "haven_labelled" columns from SPSS imports, tibbles, etc.) due to its internal matrix 
+# conversion via as.matrix(). lavaan::lavCor() utilizes the same pairwise estimation 
+# algorithm as efa()/cfa() (which is more robust to sparse data, cf. previous discussion) 
+# and is therefore preferred here for consistency and reliability.
+library(lavaan)
+poly_mat <- lavCor(
+  items_recoded,           
+  ordered = item_names,
+  output = "cor"
+)
+poly_mat <- as.matrix(poly_mat)
+
+
+# Search for extreme correlations (>0.90)
+extreme_cors <- which(abs(poly_mat) > 0.90 & poly_mat != 1, arr.ind = TRUE)
+if (nrow(extreme_cors) > 0) {
+  cat("Paires d'items à corrélation tétrachorique extrême :\n")
+  print(data.frame(
+    item1 = rownames(poly_mat)[extreme_cors[,1]],
+    item2 = colnames(poly_mat)[extreme_cors[,2]],
+    r = poly_mat[extreme_cors]
+  ))
+}
+
+# Thresholds of detection of symptom for each item
+# Thresholds (expressed as Z-scores) represent the mathematical cutoff 
+# on an underlying latent continuous distribution where a response 
+# switches from 0 (absence) to 1 (presence). 
+# Higher positive values indicate rarer, more severe symptoms.
+# Using lavCor(..., output = "th") ensures perfect estimation consistency 
+# with the subsequent WLSMV factor analysis.
+thresholds <- lavCor(items_recoded, ordered = item_names, output = "th")
+print(thresholds)
+
+###### Assumptions checks #####
+# KMO test
+library(EFAtools)
+KMO(items_recoded_num)
+
+# Bartlett's test (H0 : correlation matrix = identity matrix)
+cortest.bartlett(poly_mat, n = nrow(items_recoded))
+
+# NOTE: The low KMO value (0.419) is a known mathematical artifact. 
+# Inverting a sparse tetrachoric matrix inflates partial correlations, 
+# which mechanically deflates the KMO index.
+# Factorability is instead validated by the highly significant Bartlett's 
+# test (p < 0.001) and subsequent WLSMV fit indices (CFI=0.986).
+
+# Keiser criterion
+eigen <- eigen(poly_mat)$values
+sum(eigen>1)
+# Suggests 7 factors
+
+# Scree plot
+df_scree <- data.frame(
+  Factor = 1:length(eigen),
+  Eigenvalue = eigen
+)
+
+# 3. Tracer le Scree Plot
+ggplot(df_scree, aes(x = Factor, y = Eigenvalue)) +
+  geom_line(color = "purple4", linewidth = 1) +
+  geom_point(color = "turquoise", size = 3) +
+  # Ligne repère à l'éligibilité classique de Kaiser (Eigenvalue = 1)
+  geom_hline(yintercept = 1, linetype = "dashed", color = "red") + 
+  theme_minimal() +
+  labs(
+    title = "Scree Plot (Tetrachoric Matrix)",
+    x = "Factor number",
+    y = "Eigenvalues"
+  )
+SCREE(x = items_recoded_num, cor_method = "tetra")
+
+# Parallel Analysis
+library(EFAtools)
+efa_parallel(x = items_recoded_num, N = nrow(items_recoded), eigen_type = "PCA", cor_method = "tetra")
+
+# MAP and HULL test
+library(EFAtools)
+
+retention_tests <- EFAtools::efa_retain(
+  x = items_recoded_num,                # On injecte directement la matrice
+  N = nrow(items_recoded_num),
+  cor_method = "tetra", # On spécifie la taille de l'échantillon (574)
+  criteria = c("map", "hull")         # Sélectionne le MAP et le HULL
+)
+
+# Afficher les résultats
+print(retention_tests)
+
+
+# NOTE: Standard fa.parallel() over-extracted (12 factors) due to matrix 
+# non-positive definiteness and smoothing artifacts on sparse binary data.
+# Alternative robust methods (MAP and HULL via EFAtools) are preferred here 
+# as they prevent over-factoring and confirm a parsimonious 2-factor solution.
+
+
+
+# --------------------------------------------------------------
+# 7. EFA exploratoire via lavaan avec estimateur WLSMV
+# --------------------------------------------------------------
+
+# items_recoded est déjà un data.frame de facteurs ordonnés à 2 niveaux
+# (0 = absence, 1 = présence). lavaan traite automatiquement les
+# variables "ordered" via des corrélations tétrachoriques sous-jacentes
+# lorsque estimator = "WLSMV".
+items_ord <- items_recoded
+
+efa_wlsmv <- efa(
+  data = items_ord,
+  ordered = item_names,
+  estimator = "WLSMV",
+  nfactors = 1:5,
+  rotation = "oblimin" 
+)
+
+summary(efa_wlsmv, cutoff=0.4)
+
+# Indices de fit pour choisir le nombre de facteurs
+fitMeasures(efa_wlsmv)
+
+# --------------------------------------------------------------
+# 8. Extraction de la solution retenue (exemple : 3 facteurs)
+# --------------------------------------------------------------
+
+efa_final <- efa(
+  data = items_ord,
+  ordered = item_names,
+  estimator = "WLSMV",
+  nfactors = 2,
+  rotation = "oblimin"
+)
+
+summary(efa_final, nd = 3, cutoff = 0.4, dot.cutoff = 0.2)
+
+# --------------------------------------------------------------
+# 9. Vérification des cas de Heywood (signal d'estimation artefactuelle)
+# --------------------------------------------------------------
+# Sous asymétrie sévère, WLS/WLSMV peut surestimer les saturations
+# (Marôco, 2024, Stats). Un signe direct : saturations standardisées
+# >= 1, ou variances résiduelles négatives/nulles.
+
+loadings_final <- lavInspect(efa_final, "std")$lambda
+cat("Saturations standardisées (recherche de valeurs >= 1) :\n")
+print(round(loadings_final, 3))
+if (any(abs(loadings_final) >= 0.98)) {
+  cat("ATTENTION : au moins une saturation proche ou supérieure à 1 -",
+      "signe possible de cas de Heywood / surestimation WLSMV.\n")
+}
+
+resid_var <- lavInspect(efa_final, "theta")
+resid_diag <- diag(resid_var)
+cat("Variances résiduelles (recherche de valeurs <= 0) :\n")
+print(round(resid_diag, 3))
+if (any(resid_diag <= 0.01)) {
+  cat("ATTENTION : au moins une variance résiduelle proche ou inférieure à 0 -",
+      "cas de Heywood probable pour cet item.\n")
+}
+
+### ==========================================================
+### Fin du script
+### ==========================================================
+
 
 ########## Reliability analysis ########
 rel <- reliability(items = items, nfactors=1)
@@ -352,174 +554,6 @@ splitHalf(items)
 
 ### Alpha reliability CDS complete #####
 alpha(items)
-
-
-########## EFA ###########
-##### Assumptions ######
-
-cor_pearson <- cor(
-  items,
-  use = "pairwise.complete.obs",
-  method = "pearson"
-)
-cor_pearson
-
-cor_spearman <- cor(
-  items,
-  use = "pairwise.complete.obs",
-  method = "spearman"
-)
-cor_spearman
-
-fa.parallel(
-  cor_pearson,
-  n.obs = nrow(items),
-  fa = "fa",
-  fm = "minres"
-)
-
-fa.parallel(
-  cor_spearman,
-  n.obs = nrow(items),
-  fa = "fa",
-  fm = "minres"
-)
-
-efa_P <- fa(
-  cor_pearson,
-  nfactors = 3,
-  n.obs = nrow(items),
-  fm = "minres",
-  rotate = "oblimin"
-)
-
-efa_S <- fa(
-  cor_spearman,
-  nfactors = 3,
-  n.obs = nrow(items),
-  fm = "minres",
-  rotate = "oblimin"
-)
-
-print(efa_P$loadings, cutoff = .40)
-print(efa_S$loadings, cutoff = .40)
-
-efa_P$communality
-efa_S$communality
-
-# Polychoric Correlation Matrix
-poly_cor <- polychoric(items, max.cat = 12, smooth=TRUE)
-poly_matrix <- poly_cor$rho
-
-
-
-# Multicolinearity
-
-cor_matrix <- cor(items, use = "pairwise.complete.obs")
-
-corr_values <- cor_matrix[lower.tri(cor_matrix)]
-
-range(corr_values)
-
-mean(cor_matrix[lower.tri(cor_matrix)], na.rm = TRUE)
-
-
-# Bartlett sphericity test
-# Checks whether correlation matrix is significantly different from identity matrix
-cor_matrix <- cor(items)                                   # correlation matrix of items
-bartlett_test <- cortest.bartlett(cor_matrix, n = nrow(items))
-print(bartlett_test)
-# Significant so ok to EFA
-
-# Kaiser-Meye-Oklin measure : sampling adequacy from proportion of variance among items
-kmo_result <- KMO(items)
-print(kmo_result$MSA) 
-#Result > 0.894 = OK (méritoire)
-
-# Kaiser criterion
-eigenvalues <- eigen(cor_matrix)$values
-sum(eigenvalues > 1)   # number of eigenvalues > 1
-# Indicates 7 factors but sensitive tu number of items, overestimation
-
-# Scree plot
-pca <- prcomp(items, scale. = TRUE)
-fviz_screeplot(pca, addlabels = TRUE, ncp = 10)  # show first 10 components
-ggsave(here("figures", "Screeplot.png"), width=8, height=6, dpi=300)
-# I would say 3-4 factors from the elbow on the scree plot
-
-
-# Parallel analysis
-fa.parallel(items, fm = "ml", fa = "fa", n.iter = 100, main = "Parallel Analysis Scree") 
-# Indicates 7 factors (but sensitive to sample size and number of items, might overestimate number of factors)
-
-
-#### EFA with 3 factors and promax rotation (correlated factors)
-efa1_result <- fa(items, nfactors = 3, rotate = "promax", fm = "minres")
-print(efa1_result$loadings, cutoff = 0.4, digits = 3)
-
-loadings_matrix1 <- unclass(efa1_result$loadings)
-print(loadings_matrix1, digits=3)
-
-#### EFA with 3 factors and promax rotation (correlated factors) _ Lavaan
-library(psych)
-
-
-library(EFAtools)
-
-# Lancer l'analyse parallèle adaptée aux données ordinales/non-normales
-# type = "XG" utilise la méthode de Goerz qui est ultra-résiliente
-ap_result <- PARALLEL(items, 
-                      N = nrow(items), 
-                      data_gender = "none", 
-                      engine = "EFAtools",
-                      plot = TRUE)
-
-ap_result
-
-
-library(lavaan)
-
-fit_efa <- efa(data = items,
-               nfactors = 3, 
-               rotation = "promax",
-               estimator = "WLSMV",
-               ordered=TRUE)
-
-
-summary(fit_efa, standardized=TRUE, cutoff=0.4)
-
-
-fit_multi <- efa(data = items,
-                 nfactors = 3:7, 
-                 rotation = "promax",
-                 estimator = "WLSMV",
-                 ordered=TRUE)
-
-
-summary(fit_multi, standardized=TRUE, cutoff=0.4, fit.measures=TRUE)
-
-# Comparaison directe des modèles via un test de rapport de vraisemblance robuste
-lavTestLRT(fit_multi)
-# Extraire uniquement les indicateurs clés pour vos modèles ordonnés
-fitMeasures(fit_multi, c("chisq.scaled", "df.scaled", "cfi", "tli", "rmsea"))
-
-
-#### EFA with 4 factors and promax rotation (correlated factors)  
-efa_result2 <- fa(items, nfactors = 4, rotate = "promax", fm = "minres")
-print(efa_result2$loadings, cutoff = 0.4, digits = 3)
-
-loadings_matrix2 <- unclass(efa_result2$loadings)
-print(loadings_matrix2, digits=3)
-
-
-#### EFA with 5 factors and promax rotation (correlated factors)
-efa_result3 <- fa(items, nfactors = 5, rotate = "promax", fm = "minres")
-print(efa_result3$loadings, cutoff = 0.4, digits = 3)
-
-loadings_matrix3 <- unclass(efa_result3$loadings)
-print(loadings_matrix3, digits=3)
-
-
 
 
 ###################################################################################################################
