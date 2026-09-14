@@ -582,10 +582,13 @@ plot.legend <- c("Log-normale", "Gamma", "Binomial")
 denscomp(list(fit_lognorm, fit_gamma, fit_binom), legendtext = plot.legend)
 qqcomp(list(fit_lognorm, fit_gamma, fit_binom), legendtext = plot.legend)
 
-# The AIC and BIC differences between log normal and gamma are > 10, meaning that Log Normal has the best fit for our CDS positive value.
-# This is visually confirmed by the QQ plot
-
-
+# Although a preliminary marginal fit analysis (using fitdistrplus) indicated that the positive CDS
+# scores closely followed a continuous Log-Normal distribution (lowest AIC/BIC and best QQ-plot 
+# alignment), this distribution failed to maintain homoscedasticity and proper residual specification
+# during conditional regression modeling. Consequently, a Truncated Negative Binomial distribution
+# was selected for the count component of the Hurdle model. This discrete distribution successfully
+# accounted for the bounded, integer nature of the aggregated scores (1 to 10) and ensured robust,
+# homoscedastic residuals across all model specifications.
 
 # Hurdle model
 library(glmmTMB)
