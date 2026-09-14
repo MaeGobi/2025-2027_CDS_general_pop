@@ -332,7 +332,7 @@ print(sort(min_nonzero_n))
 
 ##### Assumptions ######
 
-cor_matrix <- cor(items, use = "pairwise.complete.obs")
+cor_matrix <- cor(items, use = "pairwise.complete.obs", method = "spearman")
 
 # Multicolinearity
 corr_values <- cor_matrix[lower.tri(cor_matrix)]
@@ -365,20 +365,20 @@ ggsave(here("figures", "Screeplot.png"), width=8, height=6, dpi=300)
 
 
 ####### EFA ########
-library(psych)
-
 ### Comparison of EFA models with 1 to 3 factors for Pearson and Spearman correlations
 # Correlation matrices
 mat_spearman <- cor(items, method = "spearman")
 mat_pearson  <- cor(items, method = "pearson")
 n_sujets     <- nrow(items)
 
+compare_table <- data.frame()
+
 # Loop to have fit indices for all models
 for (type in c("Spearman", "Pearson")) {
-  mat_actuelle <- if(type == "Spearman") mat_spearman else mat_pearson
+  matrix <- if(type == "Spearman") mat_spearman else mat_pearson
   
   for (k in 1:3) {
-    modele <- fa(mat_actuelle, nfactors = k, n.obs = n_sujets, fm = "minres", rotate = "oblimin")
+    modele <- fa(matrix, nfactors = k, n.obs = n_sujets, fm = "minres", rotate = "promax")
     
     fit_k <- data.frame(
       Methode     = type,
@@ -387,17 +387,17 @@ for (type in c("Spearman", "Pearson")) {
       p_value     = round(modele$PVAL, 4),
       TLI         = round(modele$TLI, 3),
       RMSR        = round(modele$rms, 3),
-      RMSEA       = round(modele$RMSEA[1], 3),     # [1] = Index RMSEA
-      RMSEA_inf   = round(modele$RMSEA[2], 3),     # [2] = Borne inférieure
-      RMSEA_sup   = round(modele$RMSEA[3], 3),     # [3] = Borne supérieure
+      RMSEA       = round(modele$RMSEA[1], 3),     
+      RMSEA_inf   = round(modele$RMSEA[2], 3),     
+      RMSEA_sup   = round(modele$RMSEA[3], 3),     
       Fit_OffDiag = round(modele$fit.off, 3)
     )
     
-    tableau_comparatif <- rbind(tableau_comparatif, fit_k)
+    compare_table <- rbind(compare_table, fit_k)
   }
 }
 
-print(tableau_comparatif, row.names = FALSE)
+print(compare_table, row.names = FALSE)
 
 # Loop to display factor loadings for EFA with 1 to 3 factors with Spearman correlations
 for (k in 1 :3) {
@@ -409,70 +409,26 @@ for (k in 1 :3) {
 
 
 
+###### Final EFA model selected based on previous explorations #####
+#### EFA with 3 factors, spearman correlations, promax rotation (correlated factors) and minres estimator
+efa_result <- fa(items, n.obs = nrows(items), nfactors = 2, rotate = "promax", fm = "minres", cor="spearman")
+print(efa_result$loadings, cutoff = 0.4, digits = 3)
 
-#### EFA with 1 factors and promax rotation (correlated factors)
-efa1_result <- fa(items, n.obs = nrows(items), nfactors = 1, rotate = "promax", fm = "minres")
-print(efa1_result$loadings, cutoff = 0.4, digits = 3)
-
-fit1_metrics <- data.frame(
-  Chi2     = round(efa1_result$chi, 2),
-  p_value  = round(efa1_result$PVAL, 4),
-  TLI      = round(efa1_result$TLI, 3),
-  RMSR     = round(efa1_result$rms, 3),
-  RMSEA    = round(efa1_result$RMSEA[1], 3),
-  RMSEA_inf= round(efa1_result$RMSEA[2], 3),
-  RMSEA_sup= round(efa1_result$RMSEA[3], 3),
-  R2_Value = round(efa1_result$R2, 3)
+fit_metrics <- data.frame(
+  Chi2     = round(efa_result$chi, 2),
+  p_value  = round(efa_result$PVAL, 4),
+  TLI      = round(efa_result$TLI, 3),
+  RMSR     = round(efa_result$rms, 3),
+  RMSEA    = round(efa_result$RMSEA[1], 3),
+  RMSEA_inf= round(efa_result$RMSEA[2], 3),
+  RMSEA_sup= round(efa_result$RMSEA[3], 3),
+  R2_Value = round(efa_result$R2, 3)
 )
-print(fit1_metrics, row.names = FALSE)
+print(fit_metrics, row.names = FALSE)
 
-loadings_matrix1 <- unclass(efa1_result$loadings)
-print(loadings_matrix1, digits=3)
+loadings_matrix <- unclass(efa_result$loadings)
+print(loadings_matrix, digits=3)
 
-#### EFA with 1 factors and promax rotation (correlated factors)
-efa1S_result <- fa(items, nfactors = 1, rotate = "promax", fm = "minres", cor = "spearman")
-print(efa1S_result$loadings, cutoff = 0.4, digits = 3)
-
-fit1_metrics <- data.frame(
-  Chi2     = round(efa1S_result$chi, 2),
-  p_value  = round(efa1S_result$PVAL, 4),
-  TLI      = round(efa1_result$TLI, 3),
-  RMSR     = round(efa1_result$rms, 3),
-  RMSEA    = round(efa1_result$RMSEA[1], 3),
-  RMSEA_inf= round(efa1_result$RMSEA[2], 3),
-  RMSEA_sup= round(efa1_result$RMSEA[3], 3),
-  R2_Value = round(efa1_result$R2, 3)
-)
-print(fit1_metrics, row.names = FALSE)
-
-loadings_matrix1 <- unclass(efa1_result$loadings)
-print(loadings_matrix1, digits=3)
-
-#### EFA with 2 factors and promax rotation (correlated factors)  
-efa_result2 <- fa(items, nfactors = 2, rotate = "promax", fm = "minres")
-print(efa_result2$loadings, cutoff = 0.4, digits = 3)
-
-loadings_matrix2 <- unclass(efa_result2$loadings)
-print(loadings_matrix2, digits=3)
-
-#### EFA with 2 factors and promax rotation (correlated factors)  
-efa_result2 <- fa(items, nfactors = 2, rotate = "promax", fm = "minres", cor="spearman")
-print(efa_result2$loadings, cutoff = 0.4, digits = 3)
-
-loadings_matrix2 <- unclass(efa_result2$loadings)
-print(loadings_matrix2, digits=3)
-
-
-#### EFA with 3 factors and promax rotation (correlated factors)
-efa_result3 <- fa(items, nfactors = 3, rotate = "promax", fm = "minres")
-print(efa_result3$loadings, cutoff = 0.4, digits = 3)
-
-loadings_matrix3 <- unclass(efa_result3$loadings)
-print(loadings_matrix3, digits=3)
-
-
-
-  
 
 ###################################################################################################################
 # Linear Regression Models #
