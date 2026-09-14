@@ -430,47 +430,70 @@ loadings_matrix <- unclass(efa_result$loadings)
 print(loadings_matrix, digits=3)
 
 
+
+
 ###################################################################################################################
 # Linear Regression Models #
 ###################################################################################################################
+# Filter to remove cases without complete anxiety, depression and migraine
+anxdep <- c("ANXIETE_recoded", "DEPRESSION_recoded", "MIGRAINE")
+df2 <- df[complete.cases(df[, anxdep]), ]
+nrow(df2)
 
-# We transform the CDS total score using a squared root transformation as is is more adapted to a variable with a strong positive asymetry
-# with many zero values.
-summary(df$CDS_total_sum)
-describe(df$CDS_total_sum)
+# Description of CDS total score
+summary(df2$CDS_total_sum)
+describe(df2$CDS_total_sum)
+shapiro.test(df2$CDS_total_sum)
+# Non normal (skewed, leptokurique), overdispersion and autocorrelation of residuals in regression model see test model)
 
-df$CDS_tot_sqrt <- sqrt(df$CDS_total_sum)
-summary(df$CDS_tot_sqrt)
+# Logarithmic transformation of CDS total score
+df2$CDS_tot_log <- log1p(df2$CDS_total_sum)
+summary(df2$CDS_tot_log)
+describe(df2$CDS_tot_log)[, c("skew", "kurtosis")]
+shapiro.test(df2$CDS_tot_log)
+# Non normal (skewed, leptokurique), overdispersion and autocorrelation of residuals in regression model see test model)
 
-describe(df$CDS_tot_sqrt)[, c("skew", "kurtosis")]
-shapiro.test(df$CDS_tot_sqrt)
+# Root Square transformation of CDS total score
+df2$CDS_tot_sqrt <- sqrt(df2$CDS_total_sum)
+summary(df2$CDS_tot_sqrt)
+describe(df2$CDS_tot_sqrt)[, c("skew", "kurtosis")]
+shapiro.test(df2$CDS_tot_sqrt)
 
-distrib_CDS_sqrt <- ggplot(df, aes(x= CDS_tot_sqrt)) +
-    geom_histogram(aes(y=after_stat(density)), bins=30, fill="purple4", color="white") +
-    geom_density(fill="grey", alpha = 0.5) +
-    geom_vline(xintercept = mean(df[[col]], na.rm=TRUE), linetype="dashed", color="turquoise", linewidth=1) +
-    geom_vline(xintercept = median(df[[col]], na.rm=TRUE), linetype="dotdash", color="red", linewidth=1) +
-    labs(title="Distribution of transformed CDS (squared root)")
+
+# Distribution plots for CDS total scores and its log and sqrt transformations
+CDS_forms <- c("CDS_total_sum", "CDS_tot_log", "CDS_tot_sqrt")
+
+distrib_CDS <- lapply(CDS_forms, function(x) {
+  
+  # Ajout de na.rm=TRUE au cas où vous auriez des données manquantes
+  col_mean = mean(df2[[x]], na.rm = TRUE)
+  col_median = median(df2[[x]], na.rm = TRUE)
+  
+  p <- ggplot(df, aes(x = .data[[x]])) + # Correction 1 : .data[[x]] pour évaluer le texte
+    geom_histogram(aes(y = after_stat(density)), bins = 30, fill = "purple4", color = "white") +
+    geom_density(fill = "grey", alpha = 0.5) +
+    geom_vline(xintercept = col_mean, linetype = "dashed", color = "turquoise", linewidth = 1) +
+    geom_vline(xintercept = col_median, linetype = "dotdash", color = "red", linewidth = 1) +
+    labs(
+      title = paste("Distribution of", x), # Correction 2 : paste() obligatoire ici
+      x = "Score Value",
+      y = "Density"
+    ) + 
     theme_minimal()
+  
+  return(p)
+})
 
-distrib_CDS_sqrt
+wrap_plots(distrib_CDS, ncol = 3)
 
 ggsave(here("figures", "distrib_CDS_transformed.png"), width=8, height=6, dpi=300)
 
-df$CDS_tot_log <- log1p(df$CDS_total_sum)
-
-########## CDS TOTAL #########
-
-##########
-
-### Modèle 0 ###
-Model_0 <- lm(CDS_tot_sqrt~1, na.action = na.exclude, data=df)
-summary(Model_0)
+# Zero inflation that remains throughout any transformation
 
 
-
+########## Test of classical regression model #########
 ### Modèle 1 ###
-Model_1 <- lm(CDS_tot_log~ AGE, na.action = na.exclude, data=df)
+Model_1 <- lm(CDS_tot_log~ AGE, na.action = na.exclude, data=df2) # or CDS_tot_log or CDS_tot_sqrt
 summary(Model_1)
 
 # Vérification des prérequis
@@ -512,142 +535,24 @@ chi2 / df.residual(Model_1)
 # Assumptions are not met for classical linear regression as the model residuals are not
 # normally distributed, present with heteroscedasticity and autocorrelation. 
 # As the model outcome (CDS total score) is overdispersed and have a positively skewed
-# distribution with many 0 values, a negative binomial regression would be more adapted.
+# distribution with many 0 values, a hurdle (negative binomial) regression would be more adapted.
 
-############# Negative Binomial Regression ############
-###### Evaluation of model validity ######
-Model_A <- glm.nb(CDS_total_sum ~ AGE, data=df, na.action = na.exclude)
-summary(Model_A)
-exp(coef(Model_A))
-
-# For negative binomial regression, the coefficients are interpreted after being exponentiated
-# The exp(coef) is the IRR (Incidence Ratios Rate), intepreted as a % of increase 
-# (e.g. : IRR = 1.15 : 15% of increase; IRR = 0.85 : 15% of decrease)
-# The theta parameter corresponds to distribution dispersion. For a Poisson distribution, it
-# tends to + infinite. The closer it is to 0, the more it corresponds to a negative 
-# binomial distribution. The standard error gives the precision of estimation of theta.
-# The smaller it is, the best is the theta estimate.
-# To confirm the advantage of negative binomial regression over a Poisson regression
-# (used for count data but normally dispersed), we have to compare the two models. 
-# We use AIC and BIC indicators, as well as a chi-square to compare the fitting of both
-# models on the data.
-
-poisson_A <- glm(CDS_total_sum ~ AGE, data=df, na.action = na.exclude)
-summary(poisson_A)
-AIC(poisson_A, Model_A)
-pchisq(2 * (logLik(Model_A) - logLik(poisson_A)), df = 1, lower.tail = FALSE) / 2
-# The results confirm that the negative binomial distribution is better adapted to our data
-# than a poisson distribution (AIC negative binomial < AIC Poisson, significant X² test).
-
-###### Hierarchical Negative Binomial Regression Models ######
-#### Null model ###
-Model_nul <- glm.nb(CDS_total_sum ~ 1, data=df, na.action = na.exclude)
-summary(Model_nul)
-exp(coef(Model_nul))
-
-### Model A : CDS <- Age ###
-Model_A <- glm.nb(CDS_total_sum ~ AGE, data=df, na.action = na.exclude)
-summary(Model_A)
-exp(coef(Model_A))
-
-### Model B : CDS <- Age + Sex ###
-Model_B <- glm.nb(CDS_total_sum ~ AGE + SEXE, data=df, na.action = na.exclude)
-summary(Model_B)
-exp(coef(Model_B))
-
-### Model C : CDS <- Age + Sex + Anxiety ###
-Model_C <- glm.nb(CDS_total_sum ~ AGE + SEXE + ANXIETE_recoded, data=df, na.action = na.exclude)
-summary(Model_C)
-exp(coef(Model_C))
-
-
-### Model C' : CDS <- Age + Sex + Depression ###
-Model_C2 <- glm.nb(CDS_total_sum ~ AGE + SEXE + DEPRESSION_recoded, data=df, na.action = na.exclude)
-summary(Model_C2)
-exp(coef(Model_C2))
-
-
-### Model D : CDS <- Age + Sex + Anxiety + Depression ###
-Model_D <- glm.nb(CDS_total_sum ~ AGE + SEXE + ANXIETE_recoded + DEPRESSION_recoded, data=df, na.action = na.exclude)
-summary(Model_D)
-exp(coef(Model_D))
-
-### Model E : CDS <- Age + Sex + Anxiety + Depression + MIGRAINE ###
-Model_E <- glm.nb(CDS_total_sum ~ AGE + SEXE + ANXIETE_recoded + DEPRESSION_recoded + MIGRAINE, data=df, na.action = na.exclude)
-summary(Model_E)
-exp(coef(Model_E))
-
-# Assumptions verification
-# Calculer les résidus simulés adaptés au Hurdle
-residus_Model_E <- Model_E$residuals
-
-# Tracer les graphiques de diagnostic (recherche de patterns aberrants)
-plot(residus_Model_E)
-
-
-# Statistical comparison of hierarchical models, (chi squared)
-aov_mod <- anova(Model_nul, Model_A, Model_B, Model_C, Model_C2, Model_D, Model_E, test="ChiSq")
-print(aov_mod)
-
-# Summary table of models coefficients 
-stargazer(Model_A, Model_B, Model_C, Model_C2, Model_D, Model_E,
-          type = "text",
-          title = "Hierarchical Regression Models (Negative Binomial Regression",
-          dep.var.labels = "Score CDS total",
-          column.labels = c("A", "B", "C", "C2", "D", "E"),
-          apply.coef = exp,  # IRR (exp(coef))
-          p.auto = TRUE,
-          star.cutoffs = c(0.05, 0.01, 0.001),
-          digits = 3,
-          out = here("figures", "coef_hierarchical_models.txt"))
-
-# Summary table of models metrics
-models_list <- list(Model_nul = Model_nul, Model_A = Model_A, Model_B = Model_B, Model_C = Model_C, 
-                    Model_C2 = Model_C2, Model_D = Model_D, Model_E = Model_E)
-
-comparison_df <- data.frame(
-  Modele = names(models_list),
-  AIC = sapply(models_list, AIC),
-  LogLik = sapply(models_list, function(m) as.numeric(logLik(m))),
-  Theta = sapply(models_list, function(m) m$theta),
-  PseudoR2_McFadden = sapply(models_list, function(m) pR2(m)["McFadden"])
-)
-
-print(comparison_df)
-
-
-# Global summary table of all models (exportation, article ready)
-tab_model(Model_A, Model_B, Model_C, Model_C2, Model_D, Model_E,
-          show.aic = TRUE,
-          transform = "exp",
-          dv.labels = c("Model A", "Model B", "Model C", "Model C2", "Model D", "Model E"),
-          pred.labels = c("(Intercept)" = "Intercept",
-                          "AGE" = "Age",
-                          "SEXEh" = "Sex (Man)",
-                          "ANXIETE_recoded" = "Anxiety (HADS-A)",
-                          "DEPRESSION_recoded" = "Depression (HADS-D)",
-                          "MIGRAINEoui" = "Migraine (Yes)"),
-          file = here("Figures", "tableau_modeles.doc"))
-
-
-
-
-############ Hurdle Regression ############
-anxdep <- c("ANXIETE_recoded", "DEPRESSION_recoded", "MIGRAINE")
-df2 <- df[complete.cases(df[, anxdep]), ]
-nrow(df2)
-
+#########################################################################################
+# Hurdle Regression Model
+#########################################################################################
+# Test of fit for distribution of CDS scores > 0
 scores_pos <- df2$CDS_total_sum[df2$CDS_total_sum > 0]
 df_pos <- data.frame(scores_pos=scores_pos)
 
-
+# Distribution of CDS total score
 CDS_tot_distrib <- ggplot(data=df2, aes(x=CDS_total_sum)) +
   geom_histogram(aes(y=after_stat(density)), bins=30, fill="purple4", color="white") +
   geom_density(fill="grey", alpha = 0.5) +
-  geom_vline(xintercept = mean(df$CDS_total_sum, na.rm=TRUE), linetype="dashed", color="turquoise", linewidth=1) +
-  geom_vline(xintercept = median(df$CDS_total_sum, na.rm=TRUE), linetype="dotdash", color="red", linewidth=1) +
+  geom_vline(xintercept = mean(df2$CDS_total_sum, na.rm=TRUE), linetype="dashed", color="turquoise", linewidth=1) +
+  geom_vline(xintercept = median(df2$CDS_total_sum, na.rm=TRUE), linetype="dotdash", color="red", linewidth=1) +
   theme_minimal()
 
+# Distribution of CDS positive score (no 0 score)
 CDS_pos <- ggplot(data=df_pos, aes(x=scores_pos)) +
   geom_histogram(aes(y=after_stat(density)), bins=30, fill="purple4", color="white") +
   geom_density(fill="grey", alpha = 0.5) +
@@ -894,3 +799,4 @@ tab_model(M1, M2, M3, M3b, M4, M5,
                           "DEPRESSION_recoded" = "Depression (HADS-D)",
                           "MIGRAINEoui" = "Migraine (Yes)"),
           file = here("Figures", "tableau_modeles.doc"))
+
