@@ -637,8 +637,6 @@ residus_M0 <- simulateResiduals(fittedModel = M0)
 plot(residus_M0)
 
 
-
-
 #### Model 1 : CDS ~AGE ####
 M1 <- glmmTMB(
   CDS_total_sum ~ AGE,
@@ -870,6 +868,7 @@ distrib_CDS <- lapply(names(df2[c("CDS_F1", "CDS_F2")]), function(nom) {
     geom_density(fill = "grey", alpha = 0.5) +
     geom_vline(xintercept = col_mean, linetype = "dashed", color = "turquoise", linewidth = 1) +
     geom_vline(xintercept = col_median, linetype = "dotdash", color = "red", linewidth = 1) +
+    coord_cartesian(xlim = c(0,60)) +
     labs(
       title = paste("Distribution of", nom),
       x = "Score Value",
@@ -892,17 +891,14 @@ library(fitdistrplus)
 
 CDS_fac <- c("CDS_F1", "CDS_F2")
 
-# Listes pour stocker les résultats de chaque facteur
-plots_pos   <- list()
-fits        <- list()
+plots_pos <- list()
+fits      <- list()
 
 for (nom in CDS_fac) {
   
-  # Scores positifs (> 0) pour ce facteur
   scores_pos <- df2[[nom]][df2[[nom]] > 0]
   df_pos <- data.frame(scores_pos = scores_pos)
   
-  # Distribution du facteur, scores positifs seulement
   p_pos <- ggplot(data = df_pos, aes(x = scores_pos)) +
     geom_histogram(aes(y = after_stat(density)), bins = 30, fill = "purple4", color = "white") +
     geom_density(fill = "grey", alpha = 0.5) +
@@ -914,7 +910,6 @@ for (nom in CDS_fac) {
   plots_pos[[nom]] <- p_pos
   print(p_pos)
   
-  # Fitting des distributions
   fit_lognorm <- fitdist(scores_pos, "lnorm")
   fit_gamma   <- fitdist(scores_pos, "gamma")
   fit_binom   <- fitdist(scores_pos, "nbinom")
@@ -932,16 +927,18 @@ for (nom in CDS_fac) {
   print(gofstat(list(fit_lognorm, fit_gamma, fit_binom),
                 fitnames = c("Log-Normal", "Gamma", "Binomial")))
   
-  # QQ plot et density comparison
   plot.legend <- c("Log-normale", "Gamma", "Binomial")
-  denscomp(list(fit_lognorm, fit_gamma, fit_binom), legendtext = plot.legend)
-  title(main = paste(nom, "- Density comparison"))
   
-  qqcomp(list(fit_lognorm, fit_gamma, fit_binom), legendtext = plot.legend)
-  title(main = paste(nom, "- QQ plot"))
+  # Titre passé directement à la fonction, pas via title() après coup
+  denscomp(list(fit_lognorm, fit_gamma, fit_binom),
+           legendtext = plot.legend,
+           main = paste(nom, "- Density comparison"))
+  
+  qqcomp(list(fit_lognorm, fit_gamma, fit_binom),
+         legendtext = plot.legend,
+         main = paste(nom, "- QQ plot"))
 }
-
-# Although a preliminary marginal fit analysis (using fitdistrplus) indicated that the positive CDS
+# Although a preliminary marginal fit analysis (using fitdistrplus) indicated that the positive CDS FACTORS
 # scores closely followed a continuous Log-Normal distribution (lowest AIC/BIC and best QQ-plot 
 # alignment), this distribution failed to maintain homoscedasticity and proper residual specification
 # during conditional regression modeling. Consequently, a Truncated Negative Binomial distribution
@@ -953,188 +950,202 @@ for (nom in CDS_fac) {
 library(glmmTMB)
 library(DHARMa)
 
-# Model description :
-# First row = intensity model (lognormal)
-# zi = binary model (log)
-#family = distibution
 
+########################################################################################
+# FACTOR 1 
+########################################################################################
 #### Model 0 = Null Model #####
-M0 <- glmmTMB(
-  CDS_total_sum ~ 1,
+M0_F1 <- glmmTMB(
+  CDS_F1 ~ 1,
   zi = ~ 1,
   family=truncated_nbinom2(),
   data=df2)
 
-summary(M0)
+summary(M0_F1)
 
 # Exponential transformation of coefficients to interpret them as OR
 # For the binary effect (probability to have 0 = no symtpom at all)
-exp(fixef(M0)$zi)
+exp(fixef(M0_F1)$zi)
 # For the insensity effect : regression on severity of reported symptoms
-exp(fixef(M0)$cond)
+exp(fixef(M0_F1)$cond)
 
 # Assumptions verification
 # Compute simulated residuals for Hurdle model
-residus_M0 <- simulateResiduals(fittedModel = M0)
+residus_M0_F1 <- simulateResiduals(fittedModel = M0)
 
 # Assumptions plot (distribution, homoscedasticity, dispersion)
-plot(residus_M0)
-
-
+plot(residus_M0_F1)
 
 
 #### Model 1 : CDS ~AGE ####
-M1 <- glmmTMB(
-  CDS_total_sum ~ AGE,
+M1_F1 <- glmmTMB(
+  CDS_F1 ~ AGE,
   zi = ~ AGE,
   family=truncated_nbinom2(),
   data=df2)
 
-summary(M1)
+summary(M1_F1)
 
 # Exponential transformation of coefficients to interpret them as OR
 # For the binary effect (probability to have 0 = no symptom at all)
-exp(fixef(M1)$zi)
+exp(fixef(M1_F1)$zi)
 # For the intensity effect : regression on severity of reported symptoms
-exp(fixef(M1)$cond)
+exp(fixef(M1_F1)$cond)
 
 # Assumptions verification
 # Compute simulated residuals for Hurdle model
-residus_M1 <- simulateResiduals(fittedModel = M1)
+residus_M1_F1 <- simulateResiduals(fittedModel = M1_F1)
 
 # Assumptions plot (distribution, homoscedasticity, dispersion)
-plot(residus_M1)
-testDispersion(M1)
+plot(residus_M1_F1)
+testDispersion(M1_F1)
 
 
 
 #### Model 2 : CDS ~AGE+SEX ####
-M2 <- glmmTMB(
-  CDS_total_sum ~ AGE+SEXE,
+M2_F1 <- glmmTMB(
+  CDS_F1 ~ AGE+SEXE,
   zi = ~ AGE+SEXE,
   family=truncated_nbinom2(),
   data=df2)
 
-summary(M2)
+summary(M2_F1)
 
 # Exponential transformation of coefficients to interpret them as OR
 # For the binary effect (probability to have 0 = no symptom at all)
-exp(fixef(M2)$zi)
+exp(fixef(M2_F1)$zi)
 # For the intensity effect : regression on severity of reported symptoms
-exp(fixef(M2)$cond)
+exp(fixef(M2_F1)$cond)
 
 
 # Assumptions verification
 # Compute simulated residuals for Hurdle model
-residus_M2 <- simulateResiduals(fittedModel = M2)
+residus_M2_F1 <- simulateResiduals(fittedModel = M2_F1)
 
 # Assumptions plot (distribution, homoscedasticity, dispersion)
-plot(residus_M2)
-testDispersion(M2)
+plot(residus_M2_F1)
+testDispersion(M2_F1)
 
 
 #### Model 3 : CDS ~AGE+SEX+ANXIETY #####
-M3 <- glmmTMB(
-  CDS_total_sum ~ AGE+SEXE+ANXIETE_recoded,
+M3_F1 <- glmmTMB(
+  CDS_F1 ~ AGE+SEXE+ANXIETE_recoded,
   zi = ~ AGE+SEXE+ANXIETE_recoded,
   family=truncated_nbinom2(),
   data=df2)
 
-summary(M3)
+summary(M3_F1)
 
 # Exponential transformation of coefficients to interpret them as OR
 # For the binary effect (probability to have 0 = no symptom at all)
-exp(fixef(M3)$zi)
+exp(fixef(M3_F1)$zi)
 # For the intensity effect : regression on severity of reported symptoms
-exp(fixef(M3)$cond)
+exp(fixef(M3_F1)$cond)
 
 
 # Assumptions verification
 # Compute simulated residuals for Hurdle model
-residus_M3 <- simulateResiduals(fittedModel = M3)
+residus_M3_F1 <- simulateResiduals(fittedModel = M3_F1)
 
 # Assumptions plot (distribution, homoscedasticity, dispersion)
-plot(residus_M3)
-testDispersion(M3)
+plot(residus_M3_F1)
+testDispersion(M3_F1)
 
 
 
 #### Model 3bis : CDS ~AGE+SEX+ANXIETY+DEPRESSION ####
-M3b <- glmmTMB(
-  CDS_total_sum ~ AGE+SEXE+DEPRESSION_recoded,
+M3b_F1 <- glmmTMB(
+  CDS_F1 ~ AGE+SEXE+DEPRESSION_recoded,
   zi = ~ AGE+SEXE+DEPRESSION_recoded,
   family=truncated_nbinom2(),
   data=df2)
 
-summary(M3b)
+summary(M3b_F1)
 
 # Exponential transformation of coefficients to interpret them as OR
 # For the binary effect (probability to have 0 = no symptom at all)
-exp(fixef(M3b)$zi)
+exp(fixef(M3b_F1)$zi)
 # For the intensity effect : regression on severity of reported symptoms
-exp(fixef(M3b)$cond)
+exp(fixef(M3b_F1)$cond)
 
 
 # Assumptions verification
 # Compute simulated residuals for Hurdle model
-residus_M3b <- simulateResiduals(fittedModel = M3b)
+residus_M3b_F1 <- simulateResiduals(fittedModel = M3b_F1)
 
 # Assumptions plot (distribution, homoscedasticity, dispersion)
-plot(residus_M3b)
-testDispersion(M3b)
+plot(residus_M3b_F1)
+testDispersion(M3b_F1)
 
 
 
 #### Model 4 : CDS ~AGE+SEX+ANXIETY+DEPRESSION ####
-M4 <- glmmTMB(
-  CDS_total_sum ~ AGE+SEXE+ANXIETE_recoded+DEPRESSION_recoded,
+M4_F1 <- glmmTMB(
+  CDS_F1 ~ AGE+SEXE+ANXIETE_recoded+DEPRESSION_recoded,
   zi = ~ AGE+SEXE+ANXIETE_recoded+DEPRESSION_recoded,
   family=truncated_nbinom2(),
   data=df2)
 
-summary(M4)
+summary(M4_F1)
 
 # Exponential transformation of coefficients to interpret them as OR
 # For the binary effect (probability to have 0 = no symptom at all)
-exp(fixef(M4)$zi)
+exp(fixef(M4_F1)$zi)
 # For the intensity effect : regression on severity of reported symptoms
-exp(fixef(M4)$cond)
+exp(fixef(M4_F1)$cond)
 
 
 # Assumptions verification
 # Compute simulated residuals for Hurdle model
-residus_M4 <- simulateResiduals(fittedModel = M4)
+residus_M4_F1 <- simulateResiduals(fittedModel = M4_F1)
 
 # Assumptions plot (distribution, homoscedasticity, dispersion)
-plot(residus_M4)
-testDispersion(M4)
+plot(residus_M4_F1)
+testDispersion(M4_F1)
 
 
 
 
 #### Model 5 : CDS ~AGE+SEX+ANXIETY+DEPRESSION+MIGRAINE ####
-M5 <- glmmTMB(
-  CDS_total_sum ~ AGE+SEXE+ANXIETE_recoded+DEPRESSION_recoded+MIGRAINE,
+M5_F1 <- glmmTMB(
+  CDS_F1 ~ AGE+SEXE+ANXIETE_recoded+DEPRESSION_recoded+MIGRAINE,
   zi = ~ AGE+SEXE+ANXIETE_recoded+DEPRESSION_recoded+MIGRAINE,
   family=truncated_nbinom2(),
   data=df2)
 
-summary(M5)
+summary(M5_F1)
 
 # Exponential transformation of coefficients to interpret them as OR
 # For the binary effect (probability to have 0 = no symptom at all)
-exp(fixef(M5)$zi)
+exp(fixef(M5_F1)$zi)
 # For the intensity effect : regression on severity of reported symptoms
-exp(fixef(M5)$cond)
+exp(fixef(M5_F1)$cond)
 
 
 # Assumptions verification
 # Compute simulated residuals for hurdle model
-residus_M5 <- simulateResiduals(fittedModel = M5)
+residus_M5_F1 <- simulateResiduals(fittedModel = M5_F1)
 
 # Assumptions plot (distribution, homoscedasticity, dispersion)
-plot(residus_M5)
-testDispersion(M5)
+plot(residus_M5_F1)
+testDispersion(M5_F1)
+
+######## Models comparison #############
+anova(M1_F1, M2_F1, M3_F1, M3b_F1, M4_F1, M5_F1)
+
+# Global summary table of all models (exportation, article ready)
+tab_model(M1_F1, M2_F1, M3_F1, M3b_F1, M4_F1, M5_F1,
+          show.aic = TRUE,
+          show.zeroinf = TRUE,
+          show.intercept = FALSE,
+          transform = "exp",
+          dv.labels = c("Model 1", "Model 2", "Model 3", "Model 3Bis", "Model 4", "Model 5"),
+          pred.labels = c("AGE" = "Age",
+                          "SEXEf" = "Sex (Woman)",
+                          "ANXIETE_recoded" = "Anxiety (HADS-A)",
+                          "DEPRESSION_recoded" = "Depression (HADS-D)",
+                          "MIGRAINEoui" = "Migraine (Yes)"),
+          file = here("Figures", "tableau_modeles_Factor1.doc"))
 
 
 
@@ -1142,11 +1153,203 @@ testDispersion(M5)
 
 
 
+########################################################################################
+# FACTOR 2
+########################################################################################
+#### Model 0 = Null Model #####
+M0_F2 <- glmmTMB(
+  CDS_F2 ~ 1,
+  zi = ~ 1,
+  family=truncated_nbinom2(),
+  data=df2)
+
+summary(M0_F2)
+
+# Exponential transformation of coefficients to interpret them as OR
+# For the binary effect (probability to have 0 = no symtpom at all)
+exp(fixef(M0_F2)$zi)
+# For the insensity effect : regression on severity of reported symptoms
+exp(fixef(M0_F2)$cond)
+
+# Assumptions verification
+# Compute simulated residuals for Hurdle model
+residus_M0_F2 <- simulateResiduals(fittedModel = M0_F2)
+
+# Assumptions plot (distribution, homoscedasticity, dispersion)
+plot(residus_M0_F2)
+
+
+#### Model 1 : CDS ~AGE ####
+M1_F2 <- glmmTMB(
+  CDS_F2 ~ AGE,
+  zi = ~ AGE,
+  family=truncated_nbinom2(),
+  data=df2)
+
+summary(M1_F2)
+
+# Exponential transformation of coefficients to interpret them as OR
+# For the binary effect (probability to have 0 = no symptom at all)
+exp(fixef(M1_F2)$zi)
+# For the intensity effect : regression on severity of reported symptoms
+exp(fixef(M1_F2)$cond)
+
+# Assumptions verification
+# Compute simulated residuals for Hurdle model
+residus_M1_F2 <- simulateResiduals(fittedModel = M1_F2)
+
+# Assumptions plot (distribution, homoscedasticity, dispersion)
+plot(residus_M1_F2)
+testDispersion(M1_F2)
+
+
+
+#### Model 2 : CDS ~AGE+SEX ####
+M2_F2 <- glmmTMB(
+  CDS_F2 ~ AGE+SEXE,
+  zi = ~ AGE+SEXE,
+  family=truncated_nbinom2(),
+  data=df2)
+
+summary(M2_F2)
+
+# Exponential transformation of coefficients to interpret them as OR
+# For the binary effect (probability to have 0 = no symptom at all)
+exp(fixef(M2_F2)$zi)
+# For the intensity effect : regression on severity of reported symptoms
+exp(fixef(M2_F2)$cond)
+
+
+# Assumptions verification
+# Compute simulated residuals for Hurdle model
+residus_M2_F2 <- simulateResiduals(fittedModel = M2_F2)
+
+# Assumptions plot (distribution, homoscedasticity, dispersion)
+plot(residus_M2_F2)
+testDispersion(M2_F2)
+
+
+#### Model 3 : CDS ~AGE+SEX+ANXIETY #####
+M3_F2 <- glmmTMB(
+  CDS_F2 ~ AGE+SEXE+ANXIETE_recoded,
+  zi = ~ AGE+SEXE+ANXIETE_recoded,
+  family=truncated_nbinom2(),
+  data=df2)
+
+summary(M3_F2)
+
+# Exponential transformation of coefficients to interpret them as OR
+# For the binary effect (probability to have 0 = no symptom at all)
+exp(fixef(M3_F2)$zi)
+# For the intensity effect : regression on severity of reported symptoms
+exp(fixef(M3_F2)$cond)
+
+
+# Assumptions verification
+# Compute simulated residuals for Hurdle model
+residus_M3_F2 <- simulateResiduals(fittedModel = M3_F2)
+
+# Assumptions plot (distribution, homoscedasticity, dispersion)
+plot(residus_M3_F2)
+testDispersion(M3_F2)
+
+
+
+#### Model 3bis : CDS ~AGE+SEX+ANXIETY+DEPRESSION ####
+M3b_F2 <- glmmTMB(
+  CDS_F2 ~ AGE+SEXE+DEPRESSION_recoded,
+  zi = ~ AGE+SEXE+DEPRESSION_recoded,
+  family=truncated_nbinom2(),
+  data=df2)
+
+summary(M3b_F2)
+
+# Exponential transformation of coefficients to interpret them as OR
+# For the binary effect (probability to have 0 = no symptom at all)
+exp(fixef(M3b_F2)$zi)
+# For the intensity effect : regression on severity of reported symptoms
+exp(fixef(M3b_F2)$cond)
+
+
+# Assumptions verification
+# Compute simulated residuals for Hurdle model
+residus_M3b_F2 <- simulateResiduals(fittedModel = M3b_F2)
+
+# Assumptions plot (distribution, homoscedasticity, dispersion)
+plot(residus_M3b_F2)
+testDispersion(M3b_F2)
+
+
+
+#### Model 4 : CDS ~AGE+SEX+ANXIETY+DEPRESSION ####
+M4_F2 <- glmmTMB(
+  CDS_F2 ~ AGE+SEXE+ANXIETE_recoded+DEPRESSION_recoded,
+  zi = ~ AGE+SEXE+ANXIETE_recoded+DEPRESSION_recoded,
+  family=truncated_nbinom2(),
+  data=df2)
+
+summary(M4_F2)
+
+# Exponential transformation of coefficients to interpret them as OR
+# For the binary effect (probability to have 0 = no symptom at all)
+exp(fixef(M4_F2)$zi)
+# For the intensity effect : regression on severity of reported symptoms
+exp(fixef(M4_F2)$cond)
+
+
+# Assumptions verification
+# Compute simulated residuals for Hurdle model
+residus_M4_F2 <- simulateResiduals(fittedModel = M4_F2)
+
+# Assumptions plot (distribution, homoscedasticity, dispersion)
+plot(residus_M4_F2)
+testDispersion(M4_F2)
 
 
 
 
+#### Model 5 : CDS ~AGE+SEX+ANXIETY+DEPRESSION+MIGRAINE ####
+M5_F2 <- glmmTMB(
+  CDS_F2 ~ AGE+SEXE+ANXIETE_recoded+DEPRESSION_recoded+MIGRAINE,
+  zi = ~ AGE+SEXE+ANXIETE_recoded+DEPRESSION_recoded+MIGRAINE,
+  family=truncated_nbinom2(),
+  data=df2)
 
+summary(M5_F2)
+
+# Exponential transformation of coefficients to interpret them as OR
+# For the binary effect (probability to have 0 = no symptom at all)
+exp(fixef(M5_F2)$zi)
+# For the intensity effect : regression on severity of reported symptoms
+exp(fixef(M5_F2)$cond)
+
+
+# Assumptions verification
+# Compute simulated residuals for hurdle model
+residus_M5_F2 <- simulateResiduals(fittedModel = M5_F2)
+
+# Assumptions plot (distribution, homoscedasticity, dispersion)
+plot(residus_M5_F2)
+testDispersion(M5_F2)
+
+
+
+######## Models comparison #############
+anova(M1_F2, M2_F2, M3_F2, M3b_F2, M4_F2, M5_F2)
+
+# Global summary table of all models (exportation, article ready)
+tab_model(M1_F2, M2_F2, M3_F2, M3b_F2, M4_F2, M5_F2,
+          show.aic = TRUE,
+          show.zeroinf = TRUE,
+          show.intercept = FALSE,
+          transform = "exp",
+          dv.labels = c("Model 1", "Model 2", "Model 3", "Model 3Bis", "Model 4", "Model 5"),
+          pred.labels = c("AGE" = "Age",
+                          "SEXEf" = "Sex (Woman)",
+                          "ANXIETE_recoded" = "Anxiety (HADS-A)",
+                          "DEPRESSION_recoded" = "Depression (HADS-D)",
+                          "MIGRAINEoui" = "Migraine (Yes)"),
+          file = here("Figures", "tableau_modeles_Factor2.doc"))
 
 
 
