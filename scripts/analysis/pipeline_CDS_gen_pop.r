@@ -1354,6 +1354,10 @@ tab_model(M1_F2, M2_F2, M3_F2, M3b_F2, M4_F2, M5_F2,
 
 
 ########## SEM CDS total WITH MEASUREMENT MODEL #########
+
+semTools::mardiaSkew(items)
+semTools::mardiaKurtosis(items)
+
 library(lavaan)
 
 df2$Depression <- df2$DEPRESSION_recoded
@@ -1363,13 +1367,13 @@ df2$CDS_total <- df2$CDS_total_sum
 
 SEM_CDS_total <- '
 
-CDS_total =~ CDS1+CDS2+CDS3+CDS4+CDS5+CDS6+CDS7+CDS8+CDS9+CDS10+CDS11+CDS12+CDS13+CDS14+CDS15+CDS16+CDS17+CDS18+CDS19+CDS20+CDS21+CDS22+CDS23+CDS24+CDS25+CDS26+CDS27+CDS28+CDS29
+CDS_tot =~ CDS1+CDS2+CDS3+CDS4+CDS5+CDS6+CDS7+CDS8+CDS9+CDS10+CDS11+CDS12+CDS13+CDS14+CDS15+CDS16+CDS17+CDS18+CDS19+CDS20+CDS21+CDS22+CDS23+CDS24+CDS25+CDS26+CDS27+CDS28+CDS29
 
 Depression ~~ Anxiety
 
-CDS_total ~ bAD*Depression + bAA*Anxiety + cA*AGE + SEX + MIGRAINE
-Depression ~ a1*AGE + SEX + MIGRAINE
-Anxiety ~ a2*AGE + SEX + MIGRAINE
+CDS_tot ~ bAD*Depression + bAA*Anxiety + cA*AGE + SEX + MIGRAINE
+Depression ~ a1*SEX + AGE + MIGRAINE
+Anxiety ~ a2*SEX + AGE + MIGRAINE
 
 bADbis:=bAD
 bAAbis:=bAA
@@ -1381,7 +1385,7 @@ percMedAA:=indAA/totA
 '
 
 #### Résultat bootstrapé (+ robuste, compense les données manquantes)
-fit_CDS_total <- sem(SEM_CDS_total, data=df2, missing="fiml", se="minres")
+fit_CDS_total <- sem(SEM_CDS_total, data=df2, missing="fiml", estimator="MLR")
 
 
 fit_CDS_total <- sem(SEM_CDS_total, data=PERSOCOR1, missing="fiml")
@@ -1389,3 +1393,67 @@ summary(fit_CDS_total, standardized = TRUE, fit.measures = TRUE, ci = TRUE)
 fitMeasures(fit_CDS_total, c("cfi", "gfi", "tli", "rmsea", "srmr", "nfi", "aic", "bic"))
 lavInspect(fit_CDS_total,"cor.lv")
 A=standardizedSolution(fit_CDS_total,type = "std.lv")
+
+
+SEM_CDS_factors <- '
+
+Fac1 =~ CDS1+CDS2+CDS3+CDS6+CDS8+CDS10+CDS13+CDS15+CDS23+CDS24+CDS26
+Fac2 =~ CDS5+CDS7+CDS9+CDS25+CDS28+CDS29
+
+Depression ~~ Anxiety
+Fac1 ~~ Fac2
+
+Fac1 ~ bAD*Depression + bAA*Anxiety + cA*AGE + SEX
+Fac2 ~ bBD*Depression + bBA*Anxiety + cB*AGE + SEX
+Depression ~ a1*SEX + AGE
+Anxiety ~ a2*SEX + AGE
+
+bADbis:=bAD
+bAAbis:=bAA
+indAD:=bAD*a1
+indAA:=bAA*a2
+bBDbis:=bBD
+bBAbis:=bBA
+indBD:=bBD*a1
+indBA:=bBA*a2
+totA:=indAD+cA+indAA
+totB:=indBD+cB+indBA
+percMedAD:=indAD/totA
+percMedAA:=indAA/totA
+percMedBD:=indBD/totB
+percMedBA:=indBA/totB
+'
+
+#### Résultat bootstrapé (+ robuste, compense les données manquantes)
+fit_CDS_fac <- sem(SEM_CDS_factors, data=df2, missing="fiml", estimator="MLR")
+
+
+fit_CDS_fac <- sem(SEM_CDS_total, data=PERSOCOR1, missing="fiml")
+summary(fit_CDS_fac, standardized = TRUE, fit.measures = TRUE, ci = TRUE)
+fitMeasures(fit_CDS_fac, c("cfi", "gfi", "tli", "rmsea", "srmr", "nfi", "aic", "bic"))
+lavInspect(fit_CDS_fac,"cor.lv")
+A=standardizedSolution(fit_CDS_fac,type = "std.lv")
+
+
+#################################################################################################################
+# Simple Mediation  Model CDS total score
+#################################################################################################################
+med_CDS_tot <- 
+        ' # direct effect
+             CDS_total ~ c*SEX
+           # mediators
+             Anxiety ~ aA*SEX
+             Depression ~ aD*SEX
+             CDS_total ~ bA*Anxiety + bD*Depression
+           # indirect effects
+             abA := aA*bA
+             abD := aD*bD
+           # total effect
+             total := c + (aA*bA) + (aD*bD)
+             # covariance
+             Anxiety ~~ Depression
+         '
+
+fit_med <- sem(med_CDS_tot, data=df2, estimator="MLR")
+summary(fit_med, standardized=TRUE, fit.measures=TRUE, ci=TRUE)
+fitMeasures(fit_med, c("cfi", "gfi", "tli", "rmsea", "srmr", "nfi", "aic", "bic"))
