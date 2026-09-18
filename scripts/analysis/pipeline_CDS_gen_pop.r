@@ -13,8 +13,9 @@ library(stargazer)
 library(pscl)
 library(sjPlot)
 
-######### Charge and visualize dataset ##########
-
+##################################################################################################################
+# Charge and visualize dataset
+##################################################################################################################
 # Repository definition for R project. All files called from this repo.
 here()
 
@@ -45,9 +46,11 @@ df$SEXE <- relevel(factor(df$SEXE), ref="h")
 levels(df$SEXE)
 
 
-
-########## Preprocessing ##########
+##################################################################################################################
+# Preprocessing
+##################################################################################################################
 # NaN inspection
+##################################################################################################################
 
 # Define interest columns
 cols_int <- c("SEXE", "LATERALITE", "AGE", "PROFESSION", "FAMILLE", "FUMEUR", "MIGRAINE", "ALCOOL", "aucuntroublevisuel",
@@ -63,8 +66,9 @@ colSums(is.na(df[cols_int]) | df[cols_int]=="" |is.null(df[cols_int]))
 missing <- sapply(df[cols_int], function(x) which(is.na(x) | x == "" | is.null(x)) + 1)
 missing
 
-
-####### Identify aberrant values (> total score) ######
+##################################################################################################################
+# Identify aberrant values (> total score
+##################################################################################################################
 # For CDS items
 CDS_items <- c("CDS1", "CDS2","CDS3", "CDS4", "CDS5", "CDS6", "CDS7", "CDS8", "CDS9", "CDS10", "CDS11", "CDS12",
                "CDS13", "CDS14", "CDS15","CDS16", "CDS17", "CDS18", "CDS19", "CDS20", "CDS21", "CDS22", "CDS23", 
@@ -88,9 +92,9 @@ for (col in anxdep) {
 }
 
 
-
-############ See variables distribution ##################
-
+##################################################################################################################
+# Visualization of variables distribution
+##################################################################################################################
 num_cols <- c("AGE", "CDS1", "CDS2","CDS3", "CDS4", "CDS5", "CDS6", "CDS7", "CDS8", "CDS9", "CDS10", "CDS11", "CDS12",
               "CDS13", "CDS14", "CDS15","CDS16", "CDS17", "CDS18", "CDS19", "CDS20", "CDS21", "CDS22", "CDS23", 
               "CDS24", "CDS25", "CDS26", "CDS27","CDS28", "CDS29", "ANXIETE", "DEPRESSION", "CDStotal_matlab", "CDS_total_sum", 
@@ -281,8 +285,9 @@ ggsave(here("figures", "catge_distribution_plots.png"),
 
 
 
-
-######### Outliers identification #########
+##################################################################################################################
+# Outliers Identification
+##################################################################################################################
 # Count and identify values of outliers
 for (col in num_cols) {
   out_values <- boxplot.stats(df[[col]])$out
@@ -433,6 +438,8 @@ loadings_matrix <- unclass(efa_result$loadings)
 print(loadings_matrix, digits=3)
 
 
+
+
 ###################################################################################################################
 # Adding CDS factors to data table
 ##################################################################################################################
@@ -443,6 +450,8 @@ df$CDS_F2 <- rowSums(df[, c("CDS5","CDS7","CDS9","CDS25","CDS28", "CDS29")])
 # a binomial fit of the Hurdle model. If we do a mean (divide by item number), the score becomes continuous and the
 # binomial distribution would not apply anymore, thus causing discrepancy between our analysis types.
 # We can create a mean factor score to compare both factors in controls using descriptive stats.
+
+
 
 ###################################################################################################################
 # Linear Regression Models #
@@ -764,8 +773,6 @@ plot(residus_M4)
 testDispersion(M4)
 
 
-
-
 #### Model 5 : CDS ~AGE+SEX+ANXIETY+DEPRESSION+MIGRAINE ####
 M5 <- glmmTMB(
   CDS_total_sum ~ AGE+SEXE+ANXIETE_recoded+DEPRESSION_recoded+MIGRAINE,
@@ -843,6 +850,7 @@ tab_model(M1, M2, M3, M3b, M4, M5,
 
 
 
+
 ###################################################################################################################
 # CDS Factors from EFA
 ###################################################################################################################
@@ -882,10 +890,9 @@ wrap_plots(distrib_CDS, ncol = 2)
 ggsave(here("figures", "distrib_CDS_factors.png"), width = 8, height = 6, dpi = 300)
 
 
+
 #########################################################################################
 # Hurdle Regression Model for CDS factors
-########################################################################################
-# FACTOR 1 
 ########################################################################################
 library(fitdistrplus)
 
@@ -946,13 +953,9 @@ for (nom in CDS_fac) {
 # accounted for the bounded, integer nature of the aggregated scores (1 to 10) and ensured robust,
 # homoscedastic residuals across all model specifications.
 
-# Hurdle model
-library(glmmTMB)
-library(DHARMa)
-
 
 ########################################################################################
-# FACTOR 1 
+# Hierarchical Hurdle Models for FACTOR 1 
 ########################################################################################
 #### Model 0 = Null Model #####
 M0_F1 <- glmmTMB(
@@ -1104,8 +1107,6 @@ plot(residus_M4_F1)
 testDispersion(M4_F1)
 
 
-
-
 #### Model 5 : CDS ~AGE+SEX+ANXIETY+DEPRESSION+MIGRAINE ####
 M5_F1 <- glmmTMB(
   CDS_F1 ~ AGE+SEXE+ANXIETE_recoded+DEPRESSION_recoded+MIGRAINE,
@@ -1154,7 +1155,7 @@ tab_model(M1_F1, M2_F1, M3_F1, M3b_F1, M4_F1, M5_F1,
 
 
 ########################################################################################
-# FACTOR 2
+# Hierarchical Hurdle Models for FACTOR 2
 ########################################################################################
 #### Model 0 = Null Model #####
 M0_F2 <- glmmTMB(
@@ -1306,8 +1307,6 @@ plot(residus_M4_F2)
 testDispersion(M4_F2)
 
 
-
-
 #### Model 5 : CDS ~AGE+SEX+ANXIETY+DEPRESSION+MIGRAINE ####
 M5_F2 <- glmmTMB(
   CDS_F2 ~ AGE+SEXE+ANXIETE_recoded+DEPRESSION_recoded+MIGRAINE,
@@ -1353,19 +1352,25 @@ tab_model(M1_F2, M2_F2, M3_F2, M3b_F2, M4_F2, M5_F2,
 
 
 
-########## SEM CDS total WITH MEASUREMENT MODEL #########
 
-semTools::mardiaSkew(items)
-semTools::mardiaKurtosis(items)
 
+################################################################################################################
+# SEM CDS factors WITH MEASUREMENT MODEL
+################################################################################################################
 library(lavaan)
 
+# Check multivariate normality on CDS items
+semTools::mardiaSkew(items)
+semTools::mardiaKurtosis(items)
+# not respected, justifies the use of MLR estimator
+
+# Recoding of variables to use in model syntax
 df2$Depression <- df2$DEPRESSION_recoded
 df2$Anxiety <- df2$ANXIETE_recoded
 df2$SEX <- df2$SEXE
 df2$CDS_total <- df2$CDS_total_sum
 
-
+#### SEM Model definition
 SEM_CDS_factors <- '
 
 Fac1 =~ CDS1+CDS2+CDS3+CDS6+CDS8+CDS10+CDS13+CDS15+CDS23+CDS24+CDS26
@@ -1405,9 +1410,10 @@ fitMeasures(fit_CDS_fac, c("cfi", "gfi", "tli", "rmsea", "srmr", "nfi", "aic", "
 lavInspect(fit_CDS_fac,"cor.lv")
 A=standardizedSolution(fit_CDS_fac,type = "std.lv")
 
+
+#### Export results as table
 library(officer)
 library(flextable)
-### Export results as table
 # Extraction of standardized estimate
 tab_SEM <- standardizedsolution(fit_CDS_fac, type = "std.lv", ci = TRUE)
 
@@ -1453,6 +1459,7 @@ print(doc, target = here("Figures", "CDS_pop_gen_SEM_Fit_Indices.docx"))
 #################################################################################################################
 # Simple Mediation  Model CDS total score
 #################################################################################################################
+# Mediation model definition
 med_CDS_tot <- 
         ' # direct effect
              CDS_total ~ c*SEX
@@ -1468,12 +1475,12 @@ med_CDS_tot <-
              # covariance
              Anxiety ~~ Depression
          '
-
+#### Fitting of mediation model
 fit_med <- sem(med_CDS_tot, data=df2, estimator="MLR")
 summary(fit_med, standardized=TRUE, fit.measures=TRUE, ci=TRUE)
 
 
-### Export results as table
+#### Export results as table
 # Extraction of standardized estimate
 tab_SEM <- standardizedsolution(fit_med, type = "std.all", ci = TRUE)
 
