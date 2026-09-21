@@ -1378,11 +1378,14 @@ Fac2 =~ CDS5+CDS7+CDS9+CDS25+CDS28+CDS29
 
 Depression ~~ Anxiety
 Fac1 ~~ Fac2
+CDS7 ~~ CDS25
+CDS7 ~~ CDS28
+CDS25 ~~ CDS28
 
-Fac1 ~ bAD*Depression + bAA*Anxiety + cA*AGE + SEX
-Fac2 ~ bBD*Depression + bBA*Anxiety + cB*AGE + SEX
-Depression ~ a1*SEX + AGE
-Anxiety ~ a2*SEX + AGE
+Fac1 ~ bAD*Depression + bAA*Anxiety + AGE + cA*SEX
+Fac2 ~ bBD*Depression + bBA*Anxiety + AGE + cB*SEX
+Depression ~ a1*SEX
+Anxiety ~ a2*SEX
 
 bADbis:=bAD
 bAAbis:=bAA
@@ -1400,22 +1403,25 @@ percMedBD:=indBD/totB
 percMedBA:=indBA/totB
 '
 
-#### Bootsraped results (+ robust, compensate missing data)
-fit_CDS_fac <- sem(SEM_CDS_factors, data=df2, missing="fiml", estimator="MLR", se="boostrap", boostrap=5000)
-
-#### Results without boostrap for quick look 
+#### Results without boostrap but robust estimation
+# For overview AND FIT INDICES (bootstrap does not correct for high multivariate non normality on fit indices)
 fit_CDS_fac <- sem(SEM_CDS_factors, data=df2, missing="fiml", estimator="MLR")
 summary(fit_CDS_fac, standardized = TRUE, fit.measures = TRUE, ci = TRUE)
-fitMeasures(fit_CDS_fac, c("cfi", "gfi", "tli", "rmsea", "srmr", "nfi", "aic", "bic"))
+fitMeasures(fit_CDS_fac, c("cfi.robust", "gfi.robust", "tli.robust", "rmsea.robust", "srmr", "nfi", "aic", "bic"))
 lavInspect(fit_CDS_fac,"cor.lv")
 A=standardizedSolution(fit_CDS_fac,type = "std.lv")
+modindices(fit_CDS_fac, minimum.value = 10, sort = TRUE)
+
+#### Bootsraped results (+ robust, compensate missing data) for more robust estimation of mediation CI
+fit_CDS_fac_boot <- sem(SEM_CDS_factors, data=df2, missing="fiml", estimator="ML", se="bootstrap", bootstrap=5000)
+summary(fit_CDS_fac_boot, standardized = TRUE, fit.measures = TRUE, ci = TRUE)
 
 
 #### Export results as table
 library(officer)
 library(flextable)
 # Extraction of standardized estimate
-tab_SEM <- standardizedsolution(fit_CDS_fac, type = "std.lv", ci = TRUE)
+tab_SEM <- standardizedsolution(fit_CDS_fac_boot, type = "std.lv", ci = TRUE)
 
 # Filter standardized loadings (std.lv)
 loadings_std <- tab_SEM %>%
@@ -1429,16 +1435,19 @@ doc <- body_add_flextable(doc, value = ft)
 print(doc, target = here("Figures", "CDS_pop_gen_SEM_loadings_std.docx"))
 
 # Export of fit measures table
-fit_indices <- fitMeasures(fit_CDS_fac, c("chisq","df","pvalue","cfi","gfi","tli","rmsea","rmsea.ci.lower","rmsea.ci.upper","srmr","aic","bic"))
+fit_indices <- fitMeasures(fit_CDS_fac, c("chisq.scaled", "df.scaled", "pvalue.scaled", 
+                                          "cfi.robust", "gfi.robust", "tli.robust", 
+                                          "rmsea.robust", "rmsea.ci.lower.robust", "rmsea.ci.upper.robust", 
+                                          "srmr", "aic", "bic"))
 
 fit_table <- data.frame(
-  Model = "SEM_CDS_factors_general_population",
-  `Chi2 (df)` = paste0(round(fit_indices["chisq"], 2), " (", fit_indices["df"], ")"),
-  p = round(fit_indices["pvalue"], 3),
-  CFI = round(fit_indices["cfi"], 3),
-  GFI = round(fit_indices["gfi"], 3),
-  TLI = round(fit_indices["tli"], 3),
-  RMSEA = paste0(round(fit_indices["rmsea"], 3), " (", round(fit_indices["rmsea.ci.lower"], 3), "-", round(fit_indices["rmsea.ci.upper"], 3), ")"),
+  Model = "SEM_CDS_factors",
+  `Chi2 (df)` = paste0(round(fit_indices["chisq.scaled"], 2), " (", fit_indices["df.scaled"], ")"),
+  p = round(fit_indices["pvalue.scaled"], 3),
+  CFI = round(fit_indices["cfi.robust"], 3),
+  GFI = round(fit_indices["gfi.robust"], 3),
+  TLI = round(fit_indices["tli.robust"], 3),
+  RMSEA = paste0(round(fit_indices["rmsea.robust"], 3), " (", round(fit_indices["rmsea.ci.lower.robust"], 3), "-", round(fit_indices["rmsea.ci.upper.robust"], 3), ")"),
   SRMR = round(fit_indices["srmr"], 3),
   AIC = round(fit_indices["aic"], 1),
   BIC = round(fit_indices["bic"], 1)
