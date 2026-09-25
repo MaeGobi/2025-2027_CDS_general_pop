@@ -1491,6 +1491,150 @@ ggsave(here("Figures", "forest_plot_hurdle_CDS_F1.png"), combined_plot, width = 
 
 
 
+### ==========================================================
+### Forest plot (3 panels) for a hurdle model (glmmTMB) FACTOR 1 CDS
+### Panel A: Absence of symptoms (P(Y = 0), raw zi component) -> Odds Ratio
+### Panel B: Presence of symptoms (P(Y > 0), inverted zi)     -> Odds Ratio
+### Panel C: Intensity / Severity (Y | Y > 0, count component)  -> IRR
+### ==========================================================
+
+library(glmmTMB)
+library(broom.mixed)
+library(dplyr)
+library(ggplot2)
+library(patchwork)
+library(here)
+
+# --------------------------------------------------------------
+# 1. Extract fixed effects
+# --------------------------------------------------------------
+
+tidy_intensity <- broom.mixed::tidy(
+  M4_F1, effects = "fixed", component = "cond",
+  conf.int = TRUE, exponentiate = TRUE
+) %>%
+  filter(term != "(Intercept)")
+
+# Panel A : Modélise P(Y = 0) - sortie brute du composant zi
+tidy_absence <- broom.mixed::tidy(
+  M4_F1, effects = "fixed", component = "zi",
+  conf.int = TRUE, exponentiate = TRUE
+) %>%
+  filter(term != "(Intercept)")
+
+# Panel B : Modélise P(Y > 0) - inversion multiplicative (1 / OR)
+tidy_presence <- tidy_absence %>%
+  mutate(
+    conf_low_raw  = conf.low,
+    conf_high_raw = conf.high,
+    
+    estimate  = 1 / estimate,
+    conf.low  = 1 / conf_high_raw, # La borne haute devient la borne basse
+    conf.high = 1 / conf_low_raw   # La borne basse devient la borne haute
+  )
+
+# --------------------------------------------------------------
+# 2. Relabel predictors
+# --------------------------------------------------------------
+
+label_map <- c(
+  "AGE"                = "Age",
+  "SEXEf"              = "Sex (female vs. male)",
+  "ANXIETE_recoded"    = "Anxiety (HADS-A)",
+  "DEPRESSION_recoded" = "Depression (HADS-D)"
+)
+
+prepare_data <- function(df) {
+  df %>%
+    mutate(
+      label_text = ifelse(term %in% names(label_map), label_map[term], term)
+    ) %>%
+    mutate(label = factor(label_text, levels = rev(unique(label_text))))
+}
+
+tidy_intensity <- prepare_data(tidy_intensity)
+tidy_absence   <- prepare_data(tidy_absence)
+tidy_presence  <- prepare_data(tidy_presence)
+
+# --------------------------------------------------------------
+# 3. Forest plot function
+# --------------------------------------------------------------
+
+make_forest <- function(data, title, xlab, x_breaks = c(0, 1, 2)) {
+  
+  n_labels <- nlevels(data$label)
+  bg_rects <- data.frame(
+    y = seq_len(n_labels)
+  ) %>% 
+    filter(y %% 2 == 1)
+  
+  ggplot(data, aes(x = estimate, y = label)) +
+    geom_rect(
+      data = bg_rects,
+      aes(ymin = y - 0.5, ymax = y + 0.5, xmin = -Inf, xmax = Inf),
+      fill = "grey94",
+      inherit.aes = FALSE
+    ) +
+    geom_vline(xintercept = 1, linetype = "dashed", color = "grey45", linewidth = 0.5) +
+    geom_errorbarh(
+      aes(xmin = conf.low, xmax = conf.high),
+      height = 0.15,
+      color = "black",
+      linewidth = 0.6
+    ) +
+    geom_point(size = 3, shape = 19, color = "black") +
+    scale_x_continuous(breaks = x_breaks, expand = c(0, 0)) +
+    coord_cartesian(xlim=c(0,2.5))+
+    labs(title = title, x = xlab, y = NULL) +
+    theme_classic(base_size = 12) +
+    theme(
+      plot.title = element_text(face = "bold", size = 10, hjust = 0),
+      axis.text.y = element_text(color = "black", size = 10),
+      axis.text.x = element_text(color = "black", size = 9),
+      axis.title.x = element_text(size = 10),
+      axis.line=element_line(linewidth=0.3),
+      axis.ticks = element_line(linewidth=0.3),
+      panel.grid.major.y = element_blank(),
+      panel.grid.minor = element_blank()
+    )
+}
+
+# --------------------------------------------------------------
+# 4. Build the three panels
+# --------------------------------------------------------------
+
+p_absence <- make_forest(
+  tidy_absence,
+  title = "A. Occurrence component: Absence of symptoms [P(Y = 0)]",
+  xlab  = "Odds Ratio (95% CI)"
+)
+
+p_presence <- make_forest(
+  tidy_presence,
+  title = "B. Occurrence component: Presence of symptoms [P(Y > 0)]",
+  xlab  = "Odds Ratio (95% CI)"
+)
+
+p_intensity <- make_forest(
+  tidy_intensity,
+  title = "C. Intensity component: Symptom severity [Y | Y > 0]",
+  xlab  = "Incidence Rate Ratio (95% CI)"
+)
+
+# --------------------------------------------------------------
+# 5. Stack panels vertically and export
+# --------------------------------------------------------------
+
+combined_plot <- p_absence / p_presence / p_intensity +
+  plot_layout(heights = c(1, 1, 1))
+
+print(combined_plot)
+
+# La hauteur a été augmentée à 7.5 pouces pour accueillir le 3e panneau
+ggsave(here("Figures", "forest_plot_hurdle_CDS_F1_invOR.pdf"), combined_plot, width = 6, height = 7.5, units = "in")
+ggsave(here("Figures", "forest_plot_hurdle_CDS_F1_invOR.png"), combined_plot, width = 6, height = 7.5, units = "in", dpi = 300)
+
+
 
 
 #### Model 5 : CDS ~AGE+SEX+ANXIETY+DEPRESSION+MIGRAINE ####
@@ -1809,6 +1953,150 @@ print(combined_plot)
 ggsave(here("Figures", "forest_plot_hurdle_CDS_F2.pdf"), combined_plot, width = 5, height = 5.5, units = "in")
 ggsave(here("Figures", "forest_plot_hurdle_CDS_F2.png"), combined_plot, width = 5, height = 5.5, units = "in", dpi = 300)
 
+
+
+### ==========================================================
+### Forest plot (3 panels) for a hurdle model (glmmTMB) FACTOR 2 CDS
+### Panel A: Absence of symptoms (P(Y = 0), raw zi component) -> Odds Ratio
+### Panel B: Presence of symptoms (P(Y > 0), inverted zi)     -> Odds Ratio
+### Panel C: Intensity / Severity (Y | Y > 0, count component)  -> IRR
+### ==========================================================
+
+library(glmmTMB)
+library(broom.mixed)
+library(dplyr)
+library(ggplot2)
+library(patchwork)
+library(here)
+
+# --------------------------------------------------------------
+# 1. Extract fixed effects
+# --------------------------------------------------------------
+
+tidy_intensity <- broom.mixed::tidy(
+  M4_F2, effects = "fixed", component = "cond",
+  conf.int = TRUE, exponentiate = TRUE
+) %>%
+  filter(term != "(Intercept)")
+
+# Panel A : Modélise P(Y = 0) - sortie brute du composant zi
+tidy_absence <- broom.mixed::tidy(
+  M4_F2, effects = "fixed", component = "zi",
+  conf.int = TRUE, exponentiate = TRUE
+) %>%
+  filter(term != "(Intercept)")
+
+# Panel B : Modélise P(Y > 0) - inversion multiplicative (1 / OR)
+tidy_presence <- tidy_absence %>%
+  mutate(
+    conf_low_raw  = conf.low,
+    conf_high_raw = conf.high,
+    
+    estimate  = 1 / estimate,
+    conf.low  = 1 / conf_high_raw, # La borne haute devient la borne basse
+    conf.high = 1 / conf_low_raw   # La borne basse devient la borne haute
+  )
+
+# --------------------------------------------------------------
+# 2. Relabel predictors
+# --------------------------------------------------------------
+
+label_map <- c(
+  "AGE"                = "Age",
+  "SEXEf"              = "Sex (female vs. male)",
+  "ANXIETE_recoded"    = "Anxiety (HADS-A)",
+  "DEPRESSION_recoded" = "Depression (HADS-D)"
+)
+
+prepare_data <- function(df) {
+  df %>%
+    mutate(
+      label_text = ifelse(term %in% names(label_map), label_map[term], term)
+    ) %>%
+    mutate(label = factor(label_text, levels = rev(unique(label_text))))
+}
+
+tidy_intensity <- prepare_data(tidy_intensity)
+tidy_absence   <- prepare_data(tidy_absence)
+tidy_presence  <- prepare_data(tidy_presence)
+
+# --------------------------------------------------------------
+# 3. Forest plot function
+# --------------------------------------------------------------
+
+make_forest <- function(data, title, xlab, x_breaks = c(0, 1, 2)) {
+  
+  n_labels <- nlevels(data$label)
+  bg_rects <- data.frame(
+    y = seq_len(n_labels)
+  ) %>% 
+    filter(y %% 2 == 1)
+  
+  ggplot(data, aes(x = estimate, y = label)) +
+    geom_rect(
+      data = bg_rects,
+      aes(ymin = y - 0.5, ymax = y + 0.5, xmin = -Inf, xmax = Inf),
+      fill = "grey94",
+      inherit.aes = FALSE
+    ) +
+    geom_vline(xintercept = 1, linetype = "dashed", color = "grey45", linewidth = 0.5) +
+    geom_errorbarh(
+      aes(xmin = conf.low, xmax = conf.high),
+      height = 0.15,
+      color = "black",
+      linewidth = 0.6
+    ) +
+    geom_point(size = 3, shape = 19, color = "black") +
+    scale_x_continuous(breaks = x_breaks, expand = c(0, 0)) +
+    coord_cartesian(xlim=c(0,2.5))+
+    labs(title = title, x = xlab, y = NULL) +
+    theme_classic(base_size = 12) +
+    theme(
+      plot.title = element_text(face = "bold", size = 10, hjust = 0),
+      axis.text.y = element_text(color = "black", size = 10),
+      axis.text.x = element_text(color = "black", size = 9),
+      axis.title.x = element_text(size = 10),
+      axis.line=element_line(linewidth=0.3),
+      axis.ticks = element_line(linewidth=0.3),
+      panel.grid.major.y = element_blank(),
+      panel.grid.minor = element_blank()
+    )
+}
+
+# --------------------------------------------------------------
+# 4. Build the three panels
+# --------------------------------------------------------------
+
+p_absence <- make_forest(
+  tidy_absence,
+  title = "A. Occurrence component: Absence of symptoms [P(Y = 0)]",
+  xlab  = "Odds Ratio (95% CI)"
+)
+
+p_presence <- make_forest(
+  tidy_presence,
+  title = "B. Occurrence component: Presence of symptoms [P(Y > 0)]",
+  xlab  = "Odds Ratio (95% CI)"
+)
+
+p_intensity <- make_forest(
+  tidy_intensity,
+  title = "C. Intensity component: Symptom severity [Y | Y > 0]",
+  xlab  = "Incidence Rate Ratio (95% CI)"
+)
+
+# --------------------------------------------------------------
+# 5. Stack panels vertically and export
+# --------------------------------------------------------------
+
+combined_plot <- p_absence / p_presence / p_intensity +
+  plot_layout(heights = c(1, 1, 1))
+
+print(combined_plot)
+
+# La hauteur a été augmentée à 7.5 pouces pour accueillir le 3e panneau
+ggsave(here("Figures", "forest_plot_hurdle_CDS_F2_invOR.pdf"), combined_plot, width = 6, height = 7.5, units = "in")
+ggsave(here("Figures", "forest_plot_hurdle_CDS_F2_invOR.png"), combined_plot, width = 6, height = 7.5, units = "in", dpi = 300)
 
 
 
