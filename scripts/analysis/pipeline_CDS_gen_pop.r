@@ -461,6 +461,9 @@ anxdep <- c("ANXIETE_recoded", "DEPRESSION_recoded", "MIGRAINE")
 df2 <- df[complete.cases(df[, anxdep]), ]
 nrow(df2)
 
+df2$AGE_centered <- df2$AGE-mean(df2$AGE)
+describe(df2$AGE_centered)
+
 ###################################################################################################################
 # CDS Total Score
 ###################################################################################################################
@@ -648,7 +651,7 @@ plot(residus_M0)
 
 #### Model 1 : CDS ~AGE ####
 M1 <- glmmTMB(
-  CDS_total_sum ~ AGE,
+  CDS_total_sum ~ AGE_centered,
   zi = ~ AGE,
   family=truncated_nbinom2(),
   data=df2)
@@ -673,8 +676,8 @@ testDispersion(M1)
 
 #### Model 2 : CDS ~AGE+SEX ####
 M2 <- glmmTMB(
-  CDS_total_sum ~ AGE+SEXE,
-  zi = ~ AGE+SEXE,
+  CDS_total_sum ~ AGE_centered+SEXE,
+  zi = ~ AGE_centered+SEXE,
   family=truncated_nbinom2(),
   data=df2)
 
@@ -698,8 +701,8 @@ testDispersion(M2)
 
 #### Model 3 : CDS ~AGE+SEX+ANXIETY #####
 M3 <- glmmTMB(
-  CDS_total_sum ~ AGE+SEXE+ANXIETE_recoded,
-  zi = ~ AGE+SEXE+ANXIETE_recoded,
+  CDS_total_sum ~ AGE_centered+SEXE+ANXIETE_recoded,
+  zi = ~ AGE_centered+SEXE+ANXIETE_recoded,
   family=truncated_nbinom2(),
   data=df2)
 
@@ -724,8 +727,8 @@ testDispersion(M3)
 
 #### Model 3bis : CDS ~AGE+SEX+ANXIETY+DEPRESSION ####
 M3b <- glmmTMB(
-  CDS_total_sum ~ AGE+SEXE+DEPRESSION_recoded,
-  zi = ~ AGE+SEXE+DEPRESSION_recoded,
+  CDS_total_sum ~ AGE_centered+SEXE+DEPRESSION_recoded,
+  zi = ~ AGE_centered+SEXE+DEPRESSION_recoded,
   family=truncated_nbinom2(),
   data=df2)
 
@@ -750,8 +753,8 @@ testDispersion(M3b)
 
 #### Model 4 : CDS ~AGE+SEX+ANXIETY+DEPRESSION ####
 M4 <- glmmTMB(
-  CDS_total_sum ~ AGE+SEXE+ANXIETE_recoded+DEPRESSION_recoded,
-  zi = ~ AGE+SEXE+ANXIETE_recoded+DEPRESSION_recoded,
+  CDS_total_sum ~ AGE_centered+SEXE+ANXIETE_recoded+DEPRESSION_recoded,
+  zi = ~ AGE_centered+SEXE+ANXIETE_recoded+DEPRESSION_recoded,
   family=truncated_nbinom2(),
   data=df2)
 
@@ -771,6 +774,94 @@ residus_M4 <- simulateResiduals(fittedModel = M4)
 # Assumptions plot (distribution, homoscedasticity, dispersion)
 plot(residus_M4)
 testDispersion(M4)
+
+
+
+#### Model 5 : CDS ~AGE+SEX+ANXIETY+DEPRESSION+MIGRAINE ####
+M5 <- glmmTMB(
+  CDS_total_sum ~ AGE_centered+SEXE+ANXIETE_recoded+DEPRESSION_recoded+MIGRAINE,
+  zi = ~ AGE_centered+SEXE+ANXIETE_recoded+DEPRESSION_recoded+MIGRAINE,
+  family=truncated_nbinom2(),
+  data=df2)
+
+summary(M5)
+
+# Exponential transformation of coefficients to interpret them as OR
+# For the binary effect (probability to have 0 = no symptom at all)
+exp(fixef(M5)$zi)
+# For the intensity effect : regression on severity of reported symptoms
+exp(fixef(M5)$cond)
+
+
+# Assumptions verification
+# Compute simulated residuals for hurdle model
+residus_M5 <- simulateResiduals(fittedModel = M5)
+
+# Assumptions plot (distribution, homoscedasticity, dispersion)
+plot(residus_M5)
+testDispersion(M5)
+
+
+#### Model 6 : CDS ~AGE+SEX+ANXIETY+DEPRESSION+SEX*ANXIETY ####
+M6 <- glmmTMB(
+  CDS_total_sum ~ AGE+SEXE+ANXIETE_recoded+DEPRESSION_recoded+SEXE*ANXIETE_recoded,
+  zi = ~ AGE+SEXE+ANXIETE_recoded+DEPRESSION_recoded+MIGRAINE+SEXE*ANXIETE_recoded,
+  family=truncated_nbinom2(),
+  data=df2)
+
+summary(M6)
+
+# Exponential transformation of coefficients to interpret them as OR
+# For the binary effect (probability to have 0 = no symptom at all)
+exp(fixef(M6)$zi)
+# For the intensity effect : regression on severity of reported symptoms
+exp(fixef(M6)$cond)
+
+
+# Assumptions verification
+# Compute simulated residuals for hurdle model
+residus_M6 <- simulateResiduals(fittedModel = M6)
+
+# Assumptions plot (distribution, homoscedasticity, dispersion)
+plot(residus_M6)
+testDispersion(M6)
+
+
+################## Assumptions for all models #########################################
+# For the QQ plot, the observed values perfectly follow the predicted values and the Kolmogorov-Smirnov test of deviation from the theoretical distribution is
+# non significant, meaning that the residuals follow the expected distribution.
+# The residuals vs predictions graphs indicate that homoscedasticity is respected. This is confirmed by the
+# combined adjusted quantile test, that is non significant.
+# The outlier test is non significant, confirming the absence of aberrant values.
+# The dispersion test is non significant, indicating a correctly predicted dispersion.
+
+######## Models comparison #############
+anova(M1, M2, M3, M3b, M4, M5)
+
+# Global summary table of all models (exportation, article ready)
+# 1. On stocke le tableau dans une variable nommée "mon_tableau" (Notez le "mon_tableau <- " au début)
+mon_tableau <- tab_model(M1, M2, M3, M3b, M4, M5,
+                         show.aic = TRUE,
+                         show.zeroinf = TRUE,
+                         show.intercept = FALSE,
+                         transform = "exp",
+                         dv.labels = c("Model 1", "Model 2", "Model 3", "Model 3Bis", "Model 4", "Model 5"),
+                         pred.labels = c("AGE" = "Age",
+                                         "SEXEf" = "Sex (Woman)",
+                                         "ANXIETE_recoded" = "Anxiety (HADS-A)",
+                                         "DEPRESSION_recoded" = "Depression (HADS-D)",
+                                         "MIGRAINEoui" = "Migraine (Yes)"))
+
+
+# 2. On remplace le texte d'en-tête dans le compartiment exact "page.complete" de notre variable
+mon_tableau$page.complete <- gsub("R<sup>2</sup> / R<sup>2</sup> adjusted", 
+                                  "Nagelkerke Pseudo-R<sup>2</sup>", 
+                                  mon_tableau$page.complete)
+
+# 3. On exporte manuellement le tableau modifié en fichier Word
+writeLines(mon_tableau$page.complete, here("Figures", "tableau_modeles_CDS_tot.doc"))
+
+
 
 ### ==========================================================
 ### Forest plot (2 panels) for a hurdle model (glmmTMB)
@@ -1036,82 +1127,6 @@ print(combined_plot)
 # La hauteur a été augmentée à 7.5 pouces pour accueillir le 3e panneau
 ggsave(here("Figures", "forest_plot_hurdle_CDS_tot_invOR.pdf"), combined_plot, width = 6, height = 7.5, units = "in")
 ggsave(here("Figures", "forest_plot_hurdle_CDS_tot_invOR.png"), combined_plot, width = 6, height = 7.5, units = "in", dpi = 300)
-
-
-#### Model 5 : CDS ~AGE+SEX+ANXIETY+DEPRESSION+MIGRAINE ####
-M5 <- glmmTMB(
-  CDS_total_sum ~ AGE+SEXE+ANXIETE_recoded+DEPRESSION_recoded+MIGRAINE,
-  zi = ~ AGE+SEXE+ANXIETE_recoded+DEPRESSION_recoded+MIGRAINE,
-  family=truncated_nbinom2(),
-  data=df2)
-
-summary(M5)
-
-# Exponential transformation of coefficients to interpret them as OR
-# For the binary effect (probability to have 0 = no symptom at all)
-exp(fixef(M5)$zi)
-# For the intensity effect : regression on severity of reported symptoms
-exp(fixef(M5)$cond)
-
-
-# Assumptions verification
-# Compute simulated residuals for hurdle model
-residus_M5 <- simulateResiduals(fittedModel = M5)
-
-# Assumptions plot (distribution, homoscedasticity, dispersion)
-plot(residus_M5)
-testDispersion(M5)
-
-
-#### Model 6 : CDS ~AGE+SEX+ANXIETY+DEPRESSION+SEX*ANXIETY ####
-M6 <- glmmTMB(
-  CDS_total_sum ~ AGE+SEXE+ANXIETE_recoded+DEPRESSION_recoded+SEXE*ANXIETE_recoded,
-  zi = ~ AGE+SEXE+ANXIETE_recoded+DEPRESSION_recoded+MIGRAINE+SEXE*ANXIETE_recoded,
-  family=truncated_nbinom2(),
-  data=df2)
-
-summary(M6)
-
-# Exponential transformation of coefficients to interpret them as OR
-# For the binary effect (probability to have 0 = no symptom at all)
-exp(fixef(M6)$zi)
-# For the intensity effect : regression on severity of reported symptoms
-exp(fixef(M6)$cond)
-
-
-# Assumptions verification
-# Compute simulated residuals for hurdle model
-residus_M6 <- simulateResiduals(fittedModel = M6)
-
-# Assumptions plot (distribution, homoscedasticity, dispersion)
-plot(residus_M6)
-testDispersion(M6)
-
-
-################## Assumptions for all models #########################################
-# For the QQ plot, the observed values perfectly follow the predicted values and the Kolmogorov-Smirnov test of deviation from the theoretical distribution is
-# non significant, meaning that the residuals follow the expected distribution.
-# The residuals vs predictions graphs indicate that homoscedasticity is respected. This is confirmed by the
-# combined adjusted quantile test, that is non significant.
-# The outlier test is non significant, confirming the absence of aberrant values.
-# The dispersion test is non significant, indicating a correctly predicted dispersion.
-
-######## Models comparison #############
-anova(M1, M2, M3, M3b, M4, M5)
-
-# Global summary table of all models (exportation, article ready)
-tab_model(M1, M2, M3, M3b, M4, M5,
-          show.aic = TRUE,
-          show.zeroinf = TRUE,
-          show.intercept = FALSE,
-          transform = "exp",
-          dv.labels = c("Model 1", "Model 2", "Model 3", "Model 3Bis", "Model 4", "Model 5"),
-          pred.labels = c("AGE" = "Age",
-                          "SEXEf" = "Sex (Woman)",
-                          "ANXIETE_recoded" = "Anxiety (HADS-A)",
-                          "DEPRESSION_recoded" = "Depression (HADS-D)",
-                          "MIGRAINEoui" = "Migraine (Yes)"),
-          file = here("Figures", "tableau_modeles.doc"))
 
 
 
