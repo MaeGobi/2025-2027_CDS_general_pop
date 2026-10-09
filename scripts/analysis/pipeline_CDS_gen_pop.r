@@ -106,6 +106,9 @@ summary(df[num_cols])
 
 describe(df$CDS_total_sum)
 
+print(paste("Number of participants above CDS cutoff (70) :", sum(df$CDS_total_sum > 70)))
+print(paste("Proportion of participants above CDS cutoff (70) :", round((sum(df$CDS_total_sum > 70)/nrow(df))*100, 2), "%"))
+
 ####### Plot numerical variables distribution #######
 
 #####Classic distribution plots (histogram + density) ######
@@ -437,6 +440,8 @@ print(fit_metrics, row.names = FALSE)
 loadings_matrix <- unclass(efa_result$loadings)
 print(loadings_matrix, digits=3)
 
+print(sort(efa_result$communalities))
+print(efa_result$Phi)
 
 
 
@@ -2290,8 +2295,8 @@ CDS7 ~~ CDS25
 CDS7 ~~ CDS28
 CDS25 ~~ CDS28
 
-Fac1 ~ bAD*Depression + bAA*Anxiety + AGE + cA*SEX
-Fac2 ~ bBD*Depression + bBA*Anxiety + AGE + cB*SEX
+Fac1 ~ bAD*Depression + bAA*Anxiety + AGE_centered + cA*SEX
+Fac2 ~ bBD*Depression + bBA*Anxiety + AGE_centered + cB*SEX
 Depression ~ a1*SEX
 Anxiety ~ a2*SEX
 
@@ -2376,7 +2381,7 @@ print(doc, target = here("Figures", "CDS_pop_gen_SEM_Fit_Indices_boot.docx"))
 # Mediation model definition
 med_CDS_tot <- 
         ' # direct effect
-             CDS_total ~ c*SEX
+             CDS_total ~ c*SEX + AGE_centered
            # mediators
              Anxiety ~ aA*SEX
              Depression ~ aD*SEX
@@ -2408,3 +2413,173 @@ ft <- flextable(loadings_std)
 doc <- read_docx()
 doc <- body_add_flextable(doc, value = ft)
 print(doc, target = here("Figures", "CDS_pop_gen_Mediation_loadings_std.docx"))
+
+
+
+
+### ==========================================================
+### CDS item-level figure
+### Left : % participants answering No / Yes for each item
+### Right: mean item score (+/- SD) by group
+### ==========================================================
+
+library(tidyverse)
+library(patchwork)
+library(here)
+
+# --------------------------------------------------------------
+# PARAMETRES A ADAPTER
+# --------------------------------------------------------------
+data        <- df2                 # data.frame en format large (1 ligne = 1 participant)
+items       <- paste0("CDS", 1:29) # colonnes des 29 items (score par item, 0-10)
+group_var   <- "GROUP"             # nom de la colonne de groupe
+lvl_ctrl    <- "Controls"          # modalite du groupe controle
+lvl_dd      <- "DD patients"       # modalite du groupe patients
+group_left  <- lvl_dd              # groupe utilise pour les % No/Yes (gauche)
+yes_rule    <- function(x) x > 0   # definition de "Yes" (ici: score > 0)
+item_order  <- NULL                # ex: c(5,1,17,13,...) ; NULL = tri par score moyen des patients
+
+# --------------------------------------------------------------
+# Libelles des items
+# --------------------------------------------------------------
+item_text <- c(
+  "Feeling unreal or cut-off from the world",
+  "Things look flat",
+  "Body feels as if it did not belong to self",
+  "Absence of fear in distressing situations",
+  "Favourite activities no longer enjoyable",
+  "Feeling of being a detached observer of oneself",
+  "Flavour of meals no longer gives a feeling of pleasure or distaste",
+  "Body feels very light",
+  "No emotion felt when weeping or laughing",
+  "Feeling of not having any thoughts at all",
+  "Own voice sounds remote and unreal",
+  "Feeling that hands and feet have become larger or smaller",
+  "Surroundings feel detached or unreal",
+  "Recently done things feel as if they had taken place long time ago",
+  "Seeing self outside",
+  "Feeling detached from personal memories",
+  "When in a new situation, feeling as if it had happened before",
+  "Unable to feel affection towards family and friends",
+  "Objects look smaller or further away",
+  "Unable to feel properly things touched with hands",
+  "Unable to picture things in mind",
+  "Feeling detached from pain",
+  "Feeling of being outside the body",
+  "Feeling mechanical and robotic when moving",
+  "Smell of things no longer gives feeling of pleasure or dislike",
+  "Thoughts seem to have a life of their own",
+  "Urge to touch oneself to be reassured of body existence",
+  "Unable to feel hunger or thirst",
+  "Familiar places look strange and unfamiliar"
+)
+labels_df <- tibble(
+  item_num = 1:29,
+  label_txt = paste0("Q", 1:29, ". ", item_text)
+)
+
+# --------------------------------------------------------------
+# Donnees en format long
+# --------------------------------------------------------------
+df_long <- data %>%
+  select(all_of(c(group_var, items))) %>%
+  rename(group = all_of(group_var)) %>%
+  pivot_longer(all_of(items), names_to = "item", values_to = "score") %>%
+  mutate(
+    item_num = as.integer(str_remove(item, "CDS")),
+    group    = factor(group, levels = c(lvl_ctrl, lvl_dd))
+  ) %>%
+  filter(!is.na(score), !is.na(group))
+
+# Statistiques descriptives par item x groupe
+stats <- df_long %>%
+  group_by(item_num, group) %>%
+  summarise(mean = mean(score), sd = sd(score), .groups = "drop")
+
+# Pourcentage No / Yes (groupe de gauche)
+pct <- df_long %>%
+  filter(group == group_left) %>%
+  group_by(item_num) %>%
+  summarise(yes = mean(yes_rule(score)) * 100, .groups = "drop") %>%
+  mutate(no = 100 - yes) %>%
+  pivot_longer(c(no, yes), names_to = "answer", values_to = "pct") %>%
+  mutate(
+    answer     = factor(answer, levels = c("no", "yes"), labels = c("No", "Yes")),
+    pct_signed = ifelse(answer == "No", -pct, pct)
+  )
+
+# Ordre des items (premier = en haut)
+if (is.null(item_order)) {
+  item_order <- stats %>%
+    filter(group == lvl_dd) %>%
+    arrange(desc(mean)) %>%
+    pull(item_num)
+}
+lab_levels <- labels_df %>%
+  slice(match(rev(item_order), item_num)) %>%
+  pull(label_txt)
+
+add_label <- function(d) {
+  d %>%
+    left_join(labels_df, by = "item_num") %>%
+    mutate(label = factor(label_txt, levels = lab_levels))
+}
+pct   <- add_label(pct)
+stats <- add_label(stats)
+
+# --------------------------------------------------------------
+# Panneau gauche : % participants
+# --------------------------------------------------------------
+col_no  <- "#8B4513"
+col_yes <- "#3A8A1F"
+
+p_left <- ggplot(pct, aes(x = pct_signed, y = label, fill = answer)) +
+  annotate("rect", xmin = 0, xmax = 100, ymin = -Inf, ymax = Inf, fill = "#FFFFE0") +
+  geom_col(width = 0.6) +
+  geom_vline(xintercept = 0, linewidth = 0.3) +
+  scale_fill_manual(values = c(No = col_no, Yes = col_yes), name = NULL) +
+  scale_x_continuous(
+    limits = c(-100, 100), breaks = seq(-100, 100, 25),
+    labels = abs, position = "top", expand = c(0, 0)
+  ) +
+  labs(x = "% participants", y = NULL) +
+  theme_classic(base_size = 10) +
+  theme(
+    axis.text.y     = element_text(color = "black", size = 8),
+    axis.text.x     = element_text(color = "black", size = 8),
+    axis.title.x    = element_text(size = 9),
+    legend.position = "bottom"
+  )
+
+# --------------------------------------------------------------
+# Panneau droit : score moyen +/- SD
+# --------------------------------------------------------------
+dodge <- position_dodge(width = 0.5)
+
+p_right <- ggplot(stats, aes(x = mean, y = label, color = group)) +
+  geom_errorbarh(aes(xmin = pmax(mean - sd, 0), xmax = mean + sd),
+                 height = 0, linewidth = 0.4, position = dodge) +
+  geom_point(size = 1.8, position = dodge) +
+  scale_color_manual(values = c("#0033FF", "#FF9500") %>% setNames(c(lvl_ctrl, lvl_dd)),
+                     name = NULL) +
+  scale_x_continuous(limits = c(0, 10), breaks = seq(0, 10, 2),
+                     position = "top", expand = c(0, 0)) +
+  labs(x = "Average score", y = NULL) +
+  theme_classic(base_size = 10) +
+  theme(
+    axis.text.y     = element_blank(),
+    axis.ticks.y    = element_blank(),
+    axis.line.y     = element_blank(),
+    axis.text.x     = element_text(color = "black", size = 8),
+    axis.title.x    = element_text(size = 9),
+    legend.position = "bottom"
+  )
+
+# --------------------------------------------------------------
+# Assemblage et export
+# --------------------------------------------------------------
+fig <- p_left + p_right + plot_layout(widths = c(1.7, 1))
+print(fig)
+
+ggsave(here("Figures", "CDS_items_figure.pdf"), fig, width = 10, height = 7.5, units = "in")
+ggsave(here("Figures", "CDS_items_figure.png"), fig, width = 10, height = 7.5, units = "in", dpi = 300)
