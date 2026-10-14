@@ -427,6 +427,7 @@ print(efa_result$loadings, cutoff = 0.4, digits = 3)
 
 fit_metrics <- data.frame(
   Chi2     = round(efa_result$chi, 2),
+  df       = round(efa_result$dof,2),
   p_value  = round(efa_result$PVAL, 4),
   TLI      = round(efa_result$TLI, 3),
   RMSR     = round(efa_result$rms, 3),
@@ -444,6 +445,17 @@ print(sort(efa_result$communalities))
 print(efa_result$Phi)
 
 
+##### Residuals analysis ##########
+res <- efa_result$residual
+res_vals <- res[lower.tri(res)]    
+
+n_pairs <- length(res_vals)
+cat("Résidus |r| > .05 :", sum(abs(res_vals) > .05), "/", n_pairs,
+    sprintf("(%.1f%%)\n", 100 * mean(abs(res_vals) > .05)))
+cat("Résidus |r| > .08 :", sum(abs(res_vals) > .08), "/", n_pairs,
+    sprintf("(%.1f%%)\n", 100 * mean(abs(res_vals) > .08)))
+cat("Résidus |r| > .10 :", sum(abs(res_vals) > .10), "/", n_pairs,
+    sprintf("(%.1f%%)\n", 100 * mean(abs(res_vals) > .10)))
 
 ###################################################################################################################
 # Adding CDS factors to data table
@@ -475,6 +487,8 @@ splitHalf(CDS_Fac1)
 reliability(items=CDS_Fac2, nfactors=1)
 alpha(CDS_Fac2)
 splitHalf(CDS_Fac2)
+
+
 
 ###################################################################################################################
 # Linear Regression Models #
@@ -675,7 +689,7 @@ plot(residus_M0)
 #### Model 1 : CDS ~AGE ####
 M1 <- glmmTMB(
   CDS_total_sum ~ AGE_centered,
-  zi = ~ AGE,
+  zi = ~ AGE_centered,
   family=truncated_nbinom2(),
   data=df2)
 
@@ -827,8 +841,8 @@ testDispersion(M5)
 
 #### Model 6 : CDS ~AGE+SEX+ANXIETY+DEPRESSION+SEX*ANXIETY ####
 M6 <- glmmTMB(
-  CDS_total_sum ~ AGE+SEXE+ANXIETE_recoded+DEPRESSION_recoded+SEXE*ANXIETE_recoded,
-  zi = ~ AGE+SEXE+ANXIETE_recoded+DEPRESSION_recoded+MIGRAINE+SEXE*ANXIETE_recoded,
+  CDS_total_sum ~ AGE_centered+SEXE+ANXIETE_recoded+DEPRESSION_recoded+SEXE*ANXIETE_recoded,
+  zi = ~ AGE_centered+SEXE+ANXIETE_recoded+DEPRESSION_recoded+MIGRAINE+SEXE*ANXIETE_recoded,
   family=truncated_nbinom2(),
   data=df2)
 
@@ -869,7 +883,7 @@ mon_tableau <- tab_model(M1, M2, M3, M3b, M4, M5,
                          show.intercept = FALSE,
                          transform = "exp",
                          dv.labels = c("Model 1", "Model 2", "Model 3", "Model 3Bis", "Model 4", "Model 5"),
-                         pred.labels = c("AGE" = "Age",
+                         pred.labels = c("AGE_centered" = "Age (centered)",
                                          "SEXEf" = "Sex (Woman)",
                                          "ANXIETE_recoded" = "Anxiety (HADS-A)",
                                          "DEPRESSION_recoded" = "Depression (HADS-D)",
@@ -1764,7 +1778,7 @@ tab_model(M1_F1, M2_F1, M3_F1, M3b_F1, M4_F1, M5_F1,
           show.intercept = FALSE,
           transform = "exp",
           dv.labels = c("Model 1", "Model 2", "Model 3", "Model 3Bis", "Model 4", "Model 5"),
-          pred.labels = c("AGE" = "Age",
+          pred.labels = c("AGE_centered" = "Age (centered)",
                           "SEXEf" = "Sex (Woman)",
                           "ANXIETE_recoded" = "Anxiety (HADS-A)",
                           "DEPRESSION_recoded" = "Depression (HADS-D)",
@@ -1855,8 +1869,8 @@ testDispersion(M2_F2)
 
 #### Model 3 : CDS ~AGE+SEX+ANXIETY #####
 M3_F2 <- glmmTMB(
-  CDS_F2 ~ AGE+SEXE+ANXIETE_recoded,
-  zi = ~ AGE+SEXE+ANXIETE_recoded,
+  CDS_F2 ~ AGE_centered+SEXE+ANXIETE_recoded,
+  zi = ~ AGE_centered+SEXE+ANXIETE_recoded,
   family=truncated_nbinom2(),
   data=df2)
 
@@ -2256,7 +2270,7 @@ tab_model(M1_F2, M2_F2, M3_F2, M3b_F2, M4_F2, M5_F2,
           show.intercept = FALSE,
           transform = "exp",
           dv.labels = c("Model 1", "Model 2", "Model 3", "Model 3Bis", "Model 4", "Model 5"),
-          pred.labels = c("AGE" = "Age",
+          pred.labels = c("AGE_centered" = "Age (centered)",
                           "SEXEf" = "Sex (Woman)",
                           "ANXIETE_recoded" = "Anxiety (HADS-A)",
                           "DEPRESSION_recoded" = "Depression (HADS-D)",
