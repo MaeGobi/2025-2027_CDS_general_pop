@@ -501,6 +501,75 @@ nrow(df2)
 df2$AGE_centered <- df2$AGE-mean(df2$AGE)
 describe(df2$AGE_centered)
 
+#####################################################################
+# Violin plots : CDS total according to anxiety/depression level (HADS)
+#####################################################################
+df2$ANX_grp <- factor(ifelse(df2$ANXIETE_recoded >= 8, "≥ 8", "< 8"),
+                      levels = c("< 8", "≥ 8"))
+df2$DEP_grp <- factor(ifelse(df2$DEPRESSION_recoded >= 8, "≥ 8", "< 8"),
+                      levels = c("< 8", "≥ 8"))
+
+table(df2$ANX_grp)
+table(df2$DEP_grp)
+
+# Convertit une p-value en étoiles (ns si non significatif)
+p_to_stars_ns <- function(p) {
+  case_when(p < 0.001 ~ "***",
+            p < 0.01  ~ "**",
+            p < 0.05  ~ "*",
+            TRUE      ~ "ns")
+}
+
+make_violin <- function(data, grp, xlab, fill_cols = c("lightskyblue", "royalblue4"),
+                        cutoff = 70) {
+  
+  # Effectifs par groupe pour l'axe x
+  tab      <- table(data[[grp]])
+  x_labels <- paste0(names(tab), "\n(n = ", tab, ")")
+  
+  # Test de Wilcoxon (distribution non normale, zéro-inflatée)
+  w     <- wilcox.test(data$CDS_total_sum ~ data[[grp]])
+  stars <- p_to_stars_ns(w$p.value)
+  
+  # Position du trait et des étoiles, au-dessus du max des données ET du seuil
+  y_max   <- max(data$CDS_total_sum, na.rm = TRUE)
+  y_line  <- max(y_max, cutoff) * 1.05
+  tick_h  <- max(y_max, cutoff) * 0.02
+  y_text  <- y_line + tick_h * 0.5
+  
+  ggplot(data, aes(x = .data[[grp]], y = CDS_total_sum, fill = .data[[grp]])) +
+    geom_violin(alpha = 0.6, color = "grey30", trim = TRUE) +
+    geom_sina(color = "grey45", alpha = 0.2, size = 0.5) +
+    geom_boxplot(width = 0.12, outliers = FALSE, fill = "slategray3", alpha = 0.9) +
+    # Seuil CDS
+    geom_hline(yintercept = cutoff, linetype = "dashed", color = "black", linewidth = 0.6) +
+   
+    # Crochet de significativité
+    annotate("segment", x = 1, xend = 2, y = y_line, yend = y_line, linewidth = 0.5) +
+    annotate("segment", x = 1, xend = 1, y = y_line - tick_h, yend = y_line, linewidth = 0.5) +
+    annotate("segment", x = 2, xend = 2, y = y_line - tick_h, yend = y_line, linewidth = 0.5) +
+    annotate("text", x = 1.5, y = y_text, label = stars,
+             size = ifelse(stars == "ns", 3.5, 6), vjust = ifelse(stars == "ns", -0.2, 0.3)) +
+    scale_fill_manual(values = fill_cols, guide = "none") +
+    scale_x_discrete(labels = x_labels) +
+    scale_y_continuous(expand = expansion(mult = c(0.02, 0.08)), breaks = seq(0, 160, by = 20)) +
+    labs(x = xlab, y = "CDS total score") +
+    theme_classic(base_size = 12)
+}
+
+p_vio_anx <- make_violin(df2, "ANX_grp", "Anxiety (HADS-A)")
+p_vio_dep <- make_violin(df2, "DEP_grp", "Depression (HADS-D)")
+
+
+violin_hads <- (p_vio_anx | p_vio_dep) +
+  plot_annotation(tag_levels = "A",
+                  theme = theme(plot.caption = element_text(size = 8, hjust = 0)))
+
+violin_hads
+
+ggsave(here("Figures", "violin_CDS_total_HADS.pdf"), violin_hads, width = 7, height = 4.5)
+ggsave(here("Figures", "violin_CDS_total_HADS.png"), violin_hads, width = 7, height = 4.5, dpi = 300)
+
 ###################################################################################################################
 # CDS Total Score
 ###################################################################################################################
@@ -2278,6 +2347,106 @@ tab_model(M1_F2, M2_F2, M3_F2, M3b_F2, M4_F2, M5_F2,
           file = here("Figures", "tableau_modeles_Factor2.doc"))
 
 
+
+#####################################################################
+# Figure combinée : forest plots invOR, CDS total + Facteur 1 + Facteur 2
+# Colonnes = scores ; lignes = Absence P(Y=0) / Présence P(Y>0) / Intensité
+#####################################################################
+library(broom.mixed)
+
+p_to_stars <- function(p) {
+  case_when(is.na(p) ~ "", p < 0.001 ~ "***", p < 0.01 ~ "**", p < 0.05 ~ "*", TRUE ~ "")
+}
+
+label_map <- c(
+  "AGE_centered"       = "Age (centered)",
+  "SEXEf"              = "Sex (female vs. male)",
+  "ANXIETE_recoded"    = "Anxiety (HADS-A)",
+  "DEPRESSION_recoded" = "Depression (HADS-D)"
+)
+
+comp_labels <- c(
+  "A" = "A. Absence of symptoms\nP(Y = 0) - OR",
+  "B" = "B. Presence of symptoms\nP(Y > 0) - OR",
+  "C" = "C. Symptom severity\nY | Y > 0 - IRR"
+)
+
+# Extrait les 3 composantes d'un modèle hurdle dans un seul tableau
+extract_hurdle <- function(model, score_name) {
+  
+  intensity <- broom.mixed::tidy(model, effects = "fixed", component = "cond",
+                                 conf.int = TRUE, exponentiate = TRUE) %>%
+    mutate(component = "C")
+  
+  absence <- broom.mixed::tidy(model, effects = "fixed", component = "zi",
+                               conf.int = TRUE, exponentiate = TRUE) %>%
+    mutate(component = "A")
+  
+  # Inversion multiplicative : P(Y > 0) ; p-values inchangées
+  presence <- absence %>%
+    mutate(component = "B",
+           lo = 1 / conf.high,
+           hi = 1 / conf.low,
+           estimate = 1 / estimate,
+           conf.low = lo,
+           conf.high = hi) %>%
+    dplyr::select(-lo, -hi)
+  
+  bind_rows(absence, presence, intensity) %>%
+    filter(term != "(Intercept)") %>%
+    mutate(score = score_name)
+}
+
+all_res <- bind_rows(
+  extract_hurdle(M4,    "CDS total score"),
+  extract_hurdle(M4_F1, "CDS Factor 1"),
+  extract_hurdle(M4_F2, "CDS Factor 2")
+) %>%
+  mutate(
+    stars     = p_to_stars(p.value),
+    label     = factor(label_map[term], levels = rev(unname(label_map))),
+    component = factor(component, levels = names(comp_labels), labels = comp_labels),
+    score     = factor(score, levels = c("CDS total score", "CDS Factor 1", "CDS Factor 2"))
+  )
+
+x_max <- 2.5   # à augmenter si des IC dépassent (ils seraient tronqués)
+# Bandes alternées : une ligne sur deux en gris (positions 1 et 3 de l'axe y)
+n_labels <- nlevels(all_res$label)
+bg_rects <- data.frame(y = seq_len(n_labels)) %>%
+  filter(y %% 2 == 1)
+forest_all <- ggplot(all_res, aes(x = estimate, y = label)) +
+  # Fond alterné gris / blanc (dessiné en premier = derrière)
+  geom_rect(
+    data = bg_rects,
+    aes(ymin = y - 0.5, ymax = y + 0.5, xmin = -Inf, xmax = Inf),
+    fill = "grey94",
+    inherit.aes = FALSE
+  ) +
+  geom_vline(xintercept = 1, linetype = "dashed", color = "grey45", linewidth = 0.5) +
+  geom_errorbarh(aes(xmin = conf.low, xmax = conf.high),
+                 height = 0.15, color = "black", linewidth = 0.6) +
+  geom_point(size = 2.5, color = "black") +
+  geom_text(aes(x = x_max - 0.05, label = stars),
+            hjust = 1, vjust = 0.75, size = 5, color = "black") +
+  facet_grid(component ~ score) +
+  scale_x_continuous(breaks = c(0, 1, 2), expand = c(0, 0)) +
+  coord_cartesian(xlim = c(0, x_max)) +
+  labs(x = "Odds Ratio / Incidence Rate Ratio (95% CI)", y = NULL) +
+  theme_classic(base_size = 11) +
+  theme(
+    strip.text.x       = element_text(face = "bold", size = 11),
+    strip.text.y       = element_text(face = "bold", size = 9, angle = 270),
+    strip.background   = element_rect(fill = "grey92", color = "grey60", linewidth = 0.3),
+    axis.text          = element_text(color = "black", size = 9),
+    panel.spacing      = unit(0.8, "lines"),
+    panel.border       = element_rect(color = "grey60", fill = NA, linewidth = 0.3),
+    plot.caption       = element_text(size = 8, hjust = 0)
+  )
+
+forest_all
+
+ggsave(here("Figures", "forest_plot_hurdle_CDS_all_invOR.pdf"), forest_all, width = 10, height = 7.5, units = "in")
+ggsave(here("Figures", "forest_plot_hurdle_CDS_all_invOR.png"), forest_all, width = 10, height = 7.5, units = "in", dpi = 300)
 
 
 
