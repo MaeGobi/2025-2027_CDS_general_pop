@@ -302,6 +302,75 @@ for (col in num_cols) {
 }
 
 
+##############################################################################################################################
+# Descriptive Table #
+#################################################################################################
+library(gtsummary)
+library(dplyr)
+library(flextable)
+library(here)
+
+# 1. Selection and recoding of variables
+df_table1 <- df %>%
+  select(
+    AGE, SEXE, LATERALITE, PROFESSION, FAMILLE, 
+    FUMEUR, ALCOOL, MIGRAINE, trouble_vision_global
+  ) %>%
+  mutate(
+    # PROFESSION
+    PROFESSION = trimws(as.character(PROFESSION)),
+    PROFESSION = if_else(PROFESSION == "" | PROFESSION == "NA" | PROFESSION == "NaN" | PROFESSION == "#NUL!", NA_character_, PROFESSION),
+    
+    # FAMILLE
+    FAMILLE = trimws(as.character(FAMILLE)),
+    FAMILLE = if_else(FAMILLE == "" | FAMILLE == "NA" | FAMILLE == "NaN" | FAMILLE == "#NUL!", NA_character_, FAMILLE),
+    
+    SEXE = factor(as.character(SEXE), levels = c("h", "f"), labels = c("Men", "Women")),
+    
+    LATERALITE = factor(as.character(LATERALITE), levels = c("d", "g", "amb"), 
+                        labels = c("Right-handed", "Left-handed", "Ambidextrous")),
+    
+    FUMEUR = factor(as.character(FUMEUR), levels = c("oui", "non"), labels = c("Yes", "No")),
+    
+    MIGRAINE = factor(as.character(MIGRAINE), levels = c("oui", "non"), labels = c("Yes", "No")),
+    
+    trouble_vision_global = factor(as.character(trouble_vision_global), levels = c("1", "0"), labels = c("Yes", "No")),
+    
+    ALCOOL = factor(as.character(ALCOOL), levels = c("non", "1 à 5", "6 à 10", ">10"), 
+                    labels = c("None", "1 to 5 units/week", "6 to 10 units/week", ">10 units/week")),
+    
+    # Clean encoding for texts
+    across(where(is.character), ~ iconv(., to = "UTF-8", sub = ""))
+  )
+
+# 2. Table generation
+table_cohorte <- df_table1 %>%
+  tbl_summary(
+    statistic = list(
+      all_continuous() ~ "{mean} (± {sd})",
+      all_categorical() ~ "{n} / {N} ({p}%)"
+    ),
+    digits = list(all_continuous() ~ 2, all_categorical() ~ 1),
+    label = list(
+      AGE ~ "Age (years)",
+      SEXE ~ "Sex",
+      LATERALITE ~ "Laterality",
+      PROFESSION ~ "Employment / Profession",
+      FAMILLE ~ "Marital / Family status",
+      FUMEUR ~ "Smoking status",
+      ALCOOL ~ "Alcohol consumption",
+      MIGRAINE ~ "Migraine",
+      trouble_vision_global ~ "Global vision disturbance"
+    ),
+    missing_text = "Missing values"
+  ) %>%
+  bold_labels() %>%
+  modify_header(label = "**Characteristic**", stat_0 = "**Total (N = {n})**")
+
+# 3. Export to Word
+table_cohorte %>%
+  as_flex_table() %>%
+  save_as_docx(path = here("figures", "Table1_Demographics.docx"))
 
 
 #############################################################################################################################
@@ -457,6 +526,7 @@ cat("Résidus |r| > .08 :", sum(abs(res_vals) > .08), "/", n_pairs,
 cat("Résidus |r| > .10 :", sum(abs(res_vals) > .10), "/", n_pairs,
     sprintf("(%.1f%%)\n", 100 * mean(abs(res_vals) > .10)))
 
+
 ###################################################################################################################
 # Adding CDS factors to data table
 ##################################################################################################################
@@ -488,6 +558,176 @@ reliability(items=CDS_Fac2, nfactors=1)
 alpha(CDS_Fac2)
 splitHalf(CDS_Fac2)
 
+
+#####################################################################
+# Table export of EFA
+#####################################################################
+library(flextable)
+library(officer)
+library(psych)
+library(dplyr)
+library(here)
+
+# --- Functions -------------------------------------------------
+fmt_d <- function(x, d = 2) sub("^(-?)0\\.", "\\1.", sprintf(paste0("%.", d, "f"), x))  # .45 au lieu de 0.45
+p_txt <- function(p) ifelse(p < .001, "p < .001", paste0("p = ", fmt_d(p, 3)))
+
+apa_style <- function(ft) {
+  ft %>%
+    theme_booktabs() %>%
+    align(align = "center", part = "all") %>%
+    align(j = 1, align = "left", part = "all")
+}
+finish <- function(ft) {
+  ft %>%
+    font(fontname = "Times New Roman", part = "all") %>%
+    fontsize(size = 10, part = "all") %>%
+    fontsize(size = 9, part = "footer") %>%
+    align(align = "left", part = "footer") %>%
+    autofit()
+}
+
+cut_show <- .30   # loadings en dessous : non affichés
+cut_bold <- .40   # loadings à partir de ce seuil : en gras
+
+#####################################################################
+# Table 1 : fit indices EFA 1 to 3 factors
+#####################################################################
+fit_tab <- do.call(rbind, lapply(c("Spearman", "Pearson"), function(type) {
+  R <- if (type == "Spearman") mat_spearman else mat_pearson
+  do.call(rbind, lapply(1:3, function(k) {
+    m <- fa(R, nfactors = k, n.obs = n_sujets, fm = "minres", rotate = "promax")
+    data.frame(Correlation = type, Factors = k,
+               chi2 = m$STATISTIC, dof = m$dof, p = m$PVAL,
+               TLI = m$TLI, RMSEA = m$RMSEA[1], lo = m$RMSEA[2], hi = m$RMSEA[3],
+               RMSR = m$rms, BIC = m$BIC)
+  }))
+}))
+
+t1 <- fit_tab %>%
+  transmute(Correlation,
+            Factors   = as.character(Factors),
+            chi2      = sprintf("%.2f", chi2),
+            dof       = as.character(dof),
+            p         = ifelse(p < .001, "< .001", fmt_d(p, 3)),
+            TLI       = fmt_d(TLI, 3),
+            RMSEA     = paste0(fmt_d(RMSEA, 3), " [", fmt_d(lo, 3), ", ", fmt_d(hi, 3), "]"),
+            RMSR      = fmt_d(RMSR, 3),
+            BIC       = sprintf("%.1f", BIC))
+
+ft1 <- flextable(t1) %>%
+  set_header_labels(Correlation = "Correlation matrix", Factors = "Factors",
+                    chi2 = "χ²", dof = "df", p = "p",
+                    RMSEA = "RMSEA [90% CI]", BIC = "BIC") %>%
+  apa_style() %>%
+  merge_v(j = "Correlation") %>%
+  valign(j = "Correlation", valign = "top") %>%
+  hline(i = 3, border = fp_border(width = 0.5)) %>%
+  italic(j = "p", part = "header") %>%
+  add_footer_lines(sprintf(
+    "Note. N = %d. Minres extraction with promax rotation. TLI = Tucker-Lewis index; RMSEA = root mean square error of approximation; RMSR = root mean square residual; BIC = Bayesian information criterion.",
+    n_sujets)) %>%
+  finish()
+
+#####################################################################
+# Table 2 : Final EFA - loadings (pattern matrix) + communalities
+#####################################################################
+L  <- unclass(efa_result$loadings)[, 1:2]
+h2 <- efa_result$communality
+
+# Tri des items par facteur principal, puis par loading décroissant
+# (les items sans loading >= cut_bold sont placés à la fin)
+maxl <- apply(abs(L), 1, max)
+prim <- ifelse(maxl < cut_bold, 3, apply(abs(L), 1, which.max))
+ord  <- order(prim, -maxl)
+
+t2 <- data.frame(
+  Item = rownames(L)[ord],
+  F1   = ifelse(abs(L[ord, 1]) >= cut_show, fmt_d(L[ord, 1]), ""),
+  F2   = ifelse(abs(L[ord, 2]) >= cut_show, fmt_d(L[ord, 2]), ""),
+  h2   = fmt_d(h2[ord])
+)
+
+ft2 <- flextable(t2) %>%
+  set_header_labels(F1 = "Factor 1", F2 = "Factor 2", h2 = "h²") %>%
+  apa_style()
+
+# Gras pour les loadings >= cut_bold
+for (r in seq_len(nrow(t2))) {
+  for (k in 1:2) {
+    if (abs(L[ord[r], k]) >= cut_bold) ft2 <- bold(ft2, i = r, j = k + 1)
+  }
+}
+
+ft2 <- ft2 %>%
+  add_footer_lines(sprintf(
+    "Note. N = %d. Minres extraction, promax rotation, Spearman correlations. Loadings < %s are omitted; loadings ≥ %s are in bold. h² = communality. Model fit: χ²(%d) = %.2f, %s; TLI = %s; RMSEA = %s [90%% CI %s, %s]; RMSR = %s.",
+    nrow(items), fmt_d(cut_show), fmt_d(cut_bold),
+    efa_result$dof, efa_result$STATISTIC, p_txt(efa_result$PVAL),
+    fmt_d(efa_result$TLI, 3),
+    fmt_d(efa_result$RMSEA[1], 3), fmt_d(efa_result$RMSEA[2], 3), fmt_d(efa_result$RMSEA[3], 3),
+    fmt_d(efa_result$rms, 3))) %>%
+  finish()
+
+#####################################################################
+# Tableau 3 : explained variance and factors inter-correlation
+#####################################################################
+V   <- efa_result$Vaccounted
+Phi <- efa_result$Phi
+
+t3 <- data.frame(
+  Factor = c("Factor 1", "Factor 2"),
+  SS     = sprintf("%.2f", V["SS loadings", 1:2]),
+  Var    = sprintf("%.1f", V["Proportion Var", 1:2] * 100),
+  Cum    = sprintf("%.1f", V["Cumulative Var", 1:2] * 100),
+  r1     = c("1", fmt_d(Phi[2, 1])),
+  r2     = c("", "1")
+)
+
+ft3 <- flextable(t3) %>%
+  set_header_labels(Factor = "", SS = "SS loadings", Var = "% variance",
+                    Cum = "Cumulative %", r1 = "Factor 1", r2 = "Factor 2") %>%
+  add_header_row(values = c("", "Variance explained", "Factor correlations"),
+                 colwidths = c(1, 3, 2)) %>%
+  apa_style() %>%
+  add_footer_lines(sprintf(
+    "Note. SS loadings = sum of squared loadings. With an oblique rotation, the variance explained by each factor overlaps, so the percentages are not strictly additive. Total variance accounted for by the two factors (mean communality): %.1f%%.",
+    mean(h2) * 100)) %>%
+  finish()
+
+#####################################################################
+# Table 4 : Reliability (total CDS and factors)
+#####################################################################
+rel_row <- function(x, label) {
+  a  <- psych::alpha(x, check.keys = FALSE, warnings = FALSE)
+  sh <- psych::splitHalf(x)
+  data.frame(Scale = label, Items = ncol(x),
+             alpha = fmt_d(a$total$raw_alpha, 2),
+             mean_r = fmt_d(a$total$average_r, 2),
+             split = fmt_d(sh$meanr, 2))
+}
+
+t4 <- bind_rows(rel_row(CDS,      "CDS total"),
+                rel_row(CDS_Fac1, "Factor 1"),
+                rel_row(CDS_Fac2, "Factor 2"))
+
+ft4 <- flextable(t4) %>%
+  set_header_labels(Scale = "Scale", Items = "Number of items",
+                    alpha = "Cronbach's α", mean_r = "Mean inter-item r",
+                    split = "Mean split-half") %>%
+  apa_style() %>%
+  finish()
+
+#####################################################################
+# Word Export 
+#####################################################################
+save_as_docx(
+  "Table 1. Fit indices of the exploratory factor analysis solutions"        = ft1,
+  "Table 2. Factor loadings and communalities of the final two-factor solution" = ft2,
+  "Table 3. Variance explained and correlation between factors"            = ft3,
+  "Table 4. Reliability of the CDS total score and of the two factors"     = ft4,
+  path = here("Figures", "EFA_tables.docx")
+)
 
 
 ###################################################################################################################
