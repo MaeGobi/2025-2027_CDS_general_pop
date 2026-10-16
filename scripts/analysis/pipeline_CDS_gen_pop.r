@@ -502,7 +502,96 @@ df2$AGE_centered <- df2$AGE-mean(df2$AGE)
 describe(df2$AGE_centered)
 
 #####################################################################
-# Violin plots : CDS total according to anxiety/depression level (HADS)
+# Violin plots : Descriptives
+#####################################################################
+# CDS total and anxiety/depression (HADS) according to sex
+#####################################################################
+# Convertit une p-value en étoiles (ns si non significatif)
+p_to_stars_ns <- function(p) {
+  case_when(p < 0.001 ~ "***",
+            p < 0.01  ~ "**",
+            p < 0.05  ~ "*",
+            TRUE      ~ "ns")
+}
+
+df2$ANXIETE_recoded    <- as.numeric(as.character(df2$ANXIETE_recoded))
+df2$DEPRESSION_recoded <- as.numeric(as.character(df2$DEPRESSION_recoded))
+
+# Libellés du sexe (h = homme est la référence, f = femme)
+df2$SEXE_lab <- factor(df2$SEXE, levels = c("h", "f"), labels = c("Men", "Women"))
+table(df2$SEXE_lab, useNA = "ifany")
+
+make_violin_sex <- function(data, yvar, ylab, cutoff = NULL,
+                            y_breaks = ggplot2::waiver(), y_lim = NULL,
+                            fill_cols = c("slateblue", "maroon4")) {
+  
+  d <- data[!is.na(data[[yvar]]) & !is.na(data$SEXE_lab), ]
+  
+  # Test de Wilcoxon (exact = FALSE pour gérer les ex aequo)
+  w     <- wilcox.test(d[[yvar]] ~ d$SEXE_lab, exact = FALSE)
+  stars <- p_to_stars_ns(w$p.value)
+  
+  # Position du crochet : relative à l'axe imposé s'il existe, sinon aux données
+  if (!is.null(y_lim)) {
+    y_line <- y_lim[2] * 0.92
+    tick_h <- y_lim[2] * 0.02
+  } else {
+    y_top  <- max(c(d[[yvar]], cutoff), na.rm = TRUE)
+    y_line <- y_top * 1.05
+    tick_h <- y_top * 0.02
+  }
+  y_text <- y_line + tick_h * 0.5
+  
+  p <- ggplot(d, aes(x = SEXE_lab, y = .data[[yvar]], fill = SEXE_lab)) +
+    geom_violin(alpha = 0.6, color = "grey30", trim = TRUE) +
+    geom_boxplot(width = 0.12, outliers = FALSE, fill = "plum4", alpha = 0.6)
+  
+  # Seuil : trait noir pointillé, sans étiquette
+  if (!is.null(cutoff)) {
+    p <- p + geom_hline(yintercept = cutoff, linetype = "dashed",
+                        color = "black", linewidth = 0.6)
+  }
+  
+  p +
+    # Crochet de significativité
+    annotate("segment", x = 1, xend = 2, y = y_line, yend = y_line, linewidth = 0.5) +
+    annotate("segment", x = 1, xend = 1, y = y_line - tick_h, yend = y_line, linewidth = 0.5) +
+    annotate("segment", x = 2, xend = 2, y = y_line - tick_h, yend = y_line, linewidth = 0.5) +
+    annotate("text", x = 1.5, y = y_text, label = stars,
+             size = ifelse(stars == "ns", 3.5, 6),
+             vjust = ifelse(stars == "ns", -0.2, 0.3)) +
+    scale_fill_manual(values = fill_cols, guide = "none") +
+    scale_y_continuous(breaks = y_breaks,
+                       expand = if (is.null(y_lim)) expansion(mult = c(0.02, 0.08)) else c(0, 0)) +
+    coord_cartesian(ylim = y_lim) +
+    labs(x = NULL, y = ylab) +
+    theme_classic(base_size = 12)
+}
+
+p_sex_cds <- make_violin_sex(df2, "CDS_total_sum", "CDS total score",
+                             cutoff = 70,
+                             y_breaks = seq(0, 160, 20), y_lim=c(0, 160))
+
+p_sex_anx <- make_violin_sex(df2, "ANXIETE_recoded", "Anxiety score (HADS-A)",
+                             cutoff = 8,
+                             y_breaks = seq(0, 25, 5), y_lim = c(0, 25))
+
+p_sex_dep <- make_violin_sex(df2, "DEPRESSION_recoded", "Depression score (HADS-D)",
+                             cutoff = 8,
+                             y_breaks = seq(0, 25, 5), y_lim = c(0, 25))
+
+violin_sex <- (p_sex_cds | p_sex_anx | p_sex_dep) +
+  plot_annotation(tag_levels = "A",
+                  caption = "Dashed lines: CDS cutoff = 70, HADS cutoff = 8. * p < .05, ** p < .01, *** p < .001 (Wilcoxon rank-sum test)",
+                  theme = theme(plot.caption = element_text(size = 8, hjust = 0)))
+violin_sex
+
+ggsave(here("Figures", "violin_scores_by_sex.pdf"), violin_sex, width = 10, height = 4.5)
+ggsave(here("Figures", "violin_scores_by_sex.png"), violin_sex, width = 10, height = 4.5, dpi = 300)
+
+
+#####################################################################
+# CDS total according to anxiety/depression level (HADS)
 #####################################################################
 df2$ANX_grp <- factor(ifelse(df2$ANXIETE_recoded >= 8, "≥ 8", "< 8"),
                       levels = c("< 8", "≥ 8"))
@@ -2578,13 +2667,13 @@ med_CDS_tot <-
              Anxiety ~~ Depression
          '
 #### Fitting of mediation model
-fit_med <- sem(med_CDS_tot, data=df2, estimator="MLR")
+fit_med <- sem(med_CDS_tot, data=df2, estimator="ML", se="bootstrap", bootstrap=5000)
 summary(fit_med, standardized=TRUE, fit.measures=TRUE, ci=TRUE)
 
 
 #### Export results as table
 # Extraction of standardized estimate
-tab_SEM <- standardizedsolution(fit_med, type = "std.all", ci = TRUE)
+tab_SEM <- standardizedsolution(fit_med, type = "std.lv", ci = TRUE)
 
 # Filter standardized loadings (std.all)
 loadings_std <- tab_SEM %>%
@@ -2595,7 +2684,7 @@ print(loadings_std)
 ft <- flextable(loadings_std)
 doc <- read_docx()
 doc <- body_add_flextable(doc, value = ft)
-print(doc, target = here("Figures", "CDS_pop_gen_Mediation_loadings_std.docx"))
+print(doc, target = here("Figures", "CDS_pop_gen_Mediation_loadings_std_boot.docx"))
 
 
 
