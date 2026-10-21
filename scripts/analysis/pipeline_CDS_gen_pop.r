@@ -1133,6 +1133,9 @@ residus_M2 <- simulateResiduals(fittedModel = M2)
 plot(residus_M2)
 testDispersion(M2)
 
+# VIF & tolerance/checks
+library(performance)
+check_collinearity(M2)
 
 #### Model 3 : CDS ~AGE+SEX+ANXIETY #####
 M3 <- glmmTMB(
@@ -1158,7 +1161,9 @@ residus_M3 <- simulateResiduals(fittedModel = M3)
 plot(residus_M3)
 testDispersion(M3)
 
-
+# VIF & tolerance/checks
+library(performance)
+check_collinearity(M3)
 
 #### Model 3bis : CDS ~AGE+SEX+ANXIETY+DEPRESSION ####
 M3b <- glmmTMB(
@@ -1184,6 +1189,9 @@ residus_M3b <- simulateResiduals(fittedModel = M3b)
 plot(residus_M3b)
 testDispersion(M3b)
 
+# VIF & tolerance/checks
+library(performance)
+check_collinearity(M3b)
 
 
 #### Model 4 : CDS ~AGE+SEX+ANXIETY+DEPRESSION ####
@@ -1210,7 +1218,9 @@ residus_M4 <- simulateResiduals(fittedModel = M4)
 plot(residus_M4)
 testDispersion(M4)
 
-
+# VIF & tolerance/checks
+library(performance)
+check_collinearity(M4)
 
 #### Model 5 : CDS ~AGE+SEX+ANXIETY+DEPRESSION+MIGRAINE ####
 M5 <- glmmTMB(
@@ -1236,6 +1246,9 @@ residus_M5 <- simulateResiduals(fittedModel = M5)
 plot(residus_M5)
 testDispersion(M5)
 
+# VIF & tolerance/checks
+library(performance)
+check_collinearity(M5)
 
 #### Model 6 : CDS ~AGE+SEX+ANXIETY+DEPRESSION+SEX*ANXIETY ####
 M6 <- glmmTMB(
@@ -1261,6 +1274,9 @@ residus_M6 <- simulateResiduals(fittedModel = M6)
 plot(residus_M6)
 testDispersion(M6)
 
+# VIF & tolerance/checks
+library(performance)
+check_collinearity(M6)
 
 ################## Assumptions for all models #########################################
 # For the QQ plot, the observed values perfectly follow the predicted values and the Kolmogorov-Smirnov test of deviation from the theoretical distribution is
@@ -1772,6 +1788,10 @@ residus_M2_F1 <- simulateResiduals(fittedModel = M2_F1)
 plot(residus_M2_F1)
 testDispersion(M2_F1)
 
+# VIF & tolerance/checks
+library(performance)
+check_collinearity(M2_F1)
+
 
 #### Model 3 : CDS ~AGE+SEX+ANXIETY #####
 M3_F1 <- glmmTMB(
@@ -1797,6 +1817,9 @@ residus_M3_F1 <- simulateResiduals(fittedModel = M3_F1)
 plot(residus_M3_F1)
 testDispersion(M3_F1)
 
+# VIF & tolerance/checks
+library(performance)
+check_collinearity(M3_F1)
 
 
 #### Model 3bis : CDS ~AGE+SEX+ANXIETY+DEPRESSION ####
@@ -1823,6 +1846,9 @@ residus_M3b_F1 <- simulateResiduals(fittedModel = M3b_F1)
 plot(residus_M3b_F1)
 testDispersion(M3b_F1)
 
+# VIF & tolerance/checks
+library(performance)
+check_collinearity(M3b_F1)
 
 
 #### Model 4 : CDS ~AGE+SEX+ANXIETY+DEPRESSION ####
@@ -1848,6 +1874,62 @@ residus_M4_F1 <- simulateResiduals(fittedModel = M4_F1)
 # Assumptions plot (distribution, homoscedasticity, dispersion)
 plot(residus_M4_F1)
 testDispersion(M4_F1)
+
+# VIF & tolerance/checks
+library(performance)
+check_collinearity(M4_F1)
+
+
+
+#### Model 5 : CDS ~AGE+SEX+ANXIETY+DEPRESSION+MIGRAINE ####
+M5_F1 <- glmmTMB(
+  CDS_F1 ~ AGE_centered+SEXE+ANXIETE_recoded+DEPRESSION_recoded+MIGRAINE,
+  zi = ~ AGE_centered+SEXE+ANXIETE_recoded+DEPRESSION_recoded+MIGRAINE,
+  family=truncated_nbinom2(),
+  data=df2)
+
+summary(M5_F1)
+
+# Exponential transformation of coefficients to interpret them as OR
+# For the binary effect (probability to have 0 = no symptom at all)
+exp(fixef(M5_F1)$zi)
+# For the intensity effect : regression on severity of reported symptoms
+exp(fixef(M5_F1)$cond)
+
+
+# Assumptions verification
+# Compute simulated residuals for hurdle model
+residus_M5_F1 <- simulateResiduals(fittedModel = M5_F1)
+
+# Assumptions plot (distribution, homoscedasticity, dispersion)
+plot(residus_M5_F1)
+testDispersion(M5_F1)
+
+# VIF & tolerance/checks
+library(performance)
+check_collinearity(M5_F1)
+
+
+######## Models comparison #############
+anova(M1_F1, M2_F1, M3_F1, M3b_F1, M4_F1, M5_F1)
+
+# Global summary table of all models (exportation, article ready)
+tab_model(M1_F1, M2_F1, M3_F1, M3b_F1, M4_F1, M5_F1,
+          show.aic = TRUE,
+          show.zeroinf = TRUE,
+          show.intercept = FALSE,
+          transform = "exp",
+          dv.labels = c("Model 1", "Model 2", "Model 3", "Model 3Bis", "Model 4", "Model 5"),
+          pred.labels = c("AGE_centered" = "Age (centered)",
+                          "SEXEf" = "Sex (Woman)",
+                          "ANXIETE_recoded" = "Anxiety (HADS-A)",
+                          "DEPRESSION_recoded" = "Depression (HADS-D)",
+                          "MIGRAINEoui" = "Migraine (Yes)"),
+          file = here("Figures", "tableau_modeles_Factor1.doc"))
+
+
+
+
 
 ### ==========================================================
 ### Forest plot (2 panels) - hurdle model (glmmTMB) - Factor 1 CDS
@@ -2142,53 +2224,6 @@ ggsave(here("Figures", "forest_plot_hurdle_CDS_F1_invOR.png"), combined_plot, wi
 
 
 
-#### Model 5 : CDS ~AGE+SEX+ANXIETY+DEPRESSION+MIGRAINE ####
-M5_F1 <- glmmTMB(
-  CDS_F1 ~ AGE_centered+SEXE+ANXIETE_recoded+DEPRESSION_recoded+MIGRAINE,
-  zi = ~ AGE_centered+SEXE+ANXIETE_recoded+DEPRESSION_recoded+MIGRAINE,
-  family=truncated_nbinom2(),
-  data=df2)
-
-summary(M5_F1)
-
-# Exponential transformation of coefficients to interpret them as OR
-# For the binary effect (probability to have 0 = no symptom at all)
-exp(fixef(M5_F1)$zi)
-# For the intensity effect : regression on severity of reported symptoms
-exp(fixef(M5_F1)$cond)
-
-
-# Assumptions verification
-# Compute simulated residuals for hurdle model
-residus_M5_F1 <- simulateResiduals(fittedModel = M5_F1)
-
-# Assumptions plot (distribution, homoscedasticity, dispersion)
-plot(residus_M5_F1)
-testDispersion(M5_F1)
-
-######## Models comparison #############
-anova(M1_F1, M2_F1, M3_F1, M3b_F1, M4_F1, M5_F1)
-
-# Global summary table of all models (exportation, article ready)
-tab_model(M1_F1, M2_F1, M3_F1, M3b_F1, M4_F1, M5_F1,
-          show.aic = TRUE,
-          show.zeroinf = TRUE,
-          show.intercept = FALSE,
-          transform = "exp",
-          dv.labels = c("Model 1", "Model 2", "Model 3", "Model 3Bis", "Model 4", "Model 5"),
-          pred.labels = c("AGE_centered" = "Age (centered)",
-                          "SEXEf" = "Sex (Woman)",
-                          "ANXIETE_recoded" = "Anxiety (HADS-A)",
-                          "DEPRESSION_recoded" = "Depression (HADS-D)",
-                          "MIGRAINEoui" = "Migraine (Yes)"),
-          file = here("Figures", "tableau_modeles_Factor1.doc"))
-
-
-
-
-
-
-
 ########################################################################################
 # Hierarchical Hurdle Models for FACTOR 2
 ########################################################################################
@@ -2265,6 +2300,10 @@ plot(residus_M2_F2)
 testDispersion(M2_F2)
 
 
+# VIF & tolerance/checks
+library(performance)
+check_collinearity(M2_F2)
+
 #### Model 3 : CDS ~AGE+SEX+ANXIETY #####
 M3_F2 <- glmmTMB(
   CDS_F2 ~ AGE_centered+SEXE+ANXIETE_recoded,
@@ -2289,7 +2328,9 @@ residus_M3_F2 <- simulateResiduals(fittedModel = M3_F2)
 plot(residus_M3_F2)
 testDispersion(M3_F2)
 
-
+# VIF & tolerance/checks
+library(performance)
+check_collinearity(M3_F2)
 
 #### Model 3bis : CDS ~AGE+SEX+ANXIETY+DEPRESSION ####
 M3b_F2 <- glmmTMB(
@@ -2315,7 +2356,9 @@ residus_M3b_F2 <- simulateResiduals(fittedModel = M3b_F2)
 plot(residus_M3b_F2)
 testDispersion(M3b_F2)
 
-
+# VIF & tolerance/checks
+library(performance)
+check_collinearity(M3b_F2)
 
 #### Model 4 : CDS ~AGE+SEX+ANXIETY+DEPRESSION ####
 M4_F2 <- glmmTMB(
@@ -2340,6 +2383,57 @@ residus_M4_F2 <- simulateResiduals(fittedModel = M4_F2)
 # Assumptions plot (distribution, homoscedasticity, dispersion)
 plot(residus_M4_F2)
 testDispersion(M4_F2)
+
+# VIF & tolerance/checks
+library(performance)
+check_collinearity(M4_F2)
+
+#### Model 5 : CDS ~AGE+SEX+ANXIETY+DEPRESSION+MIGRAINE ####
+M5_F2 <- glmmTMB(
+  CDS_F2 ~ AGE_centered+SEXE+ANXIETE_recoded+DEPRESSION_recoded+MIGRAINE,
+  zi = ~ AGE_centered+SEXE+ANXIETE_recoded+DEPRESSION_recoded+MIGRAINE,
+  family=truncated_nbinom2(),
+  data=df2)
+
+summary(M5_F2)
+
+# Exponential transformation of coefficients to interpret them as OR
+# For the binary effect (probability to have 0 = no symptom at all)
+exp(fixef(M5_F2)$zi)
+# For the intensity effect : regression on severity of reported symptoms
+exp(fixef(M5_F2)$cond)
+
+
+# Assumptions verification
+# Compute simulated residuals for hurdle model
+residus_M5_F2 <- simulateResiduals(fittedModel = M5_F2)
+
+# Assumptions plot (distribution, homoscedasticity, dispersion)
+plot(residus_M5_F2)
+testDispersion(M5_F2)
+
+# VIF & tolerance/checks
+library(performance)
+check_collinearity(M5_F2)
+
+
+######## Models comparison #############
+anova(M1_F2, M2_F2, M3_F2, M3b_F2, M4_F2, M5_F2)
+
+# Global summary table of all models (exportation, article ready)
+tab_model(M1_F2, M2_F2, M3_F2, M3b_F2, M4_F2, M5_F2,
+          show.aic = TRUE,
+          show.zeroinf = TRUE,
+          show.intercept = FALSE,
+          transform = "exp",
+          dv.labels = c("Model 1", "Model 2", "Model 3", "Model 3Bis", "Model 4", "Model 5"),
+          pred.labels = c("AGE_centered" = "Age (centered)",
+                          "SEXEf" = "Sex (Woman)",
+                          "ANXIETE_recoded" = "Anxiety (HADS-A)",
+                          "DEPRESSION_recoded" = "Depression (HADS-D)",
+                          "MIGRAINEoui" = "Migraine (Yes)"),
+          file = here("Figures", "tableau_modeles_Factor2.doc"))
+
 
 ### ==========================================================
 ### Forest plot (2 panels) - hurdle model (glmmTMB) - Factor 2 CDS
@@ -2631,50 +2725,6 @@ print(combined_plot)
 
 ggsave(here("Figures", "forest_plot_hurdle_CDS_F2_invOR.pdf"), combined_plot, width = 6, height = 7.5, units = "in")
 ggsave(here("Figures", "forest_plot_hurdle_CDS_F2_invOR.png"), combined_plot, width = 6, height = 7.5, units = "in", dpi = 300)
-
-#### Model 5 : CDS ~AGE+SEX+ANXIETY+DEPRESSION+MIGRAINE ####
-M5_F2 <- glmmTMB(
-  CDS_F2 ~ AGE_centered+SEXE+ANXIETE_recoded+DEPRESSION_recoded+MIGRAINE,
-  zi = ~ AGE_centered+SEXE+ANXIETE_recoded+DEPRESSION_recoded+MIGRAINE,
-  family=truncated_nbinom2(),
-  data=df2)
-
-summary(M5_F2)
-
-# Exponential transformation of coefficients to interpret them as OR
-# For the binary effect (probability to have 0 = no symptom at all)
-exp(fixef(M5_F2)$zi)
-# For the intensity effect : regression on severity of reported symptoms
-exp(fixef(M5_F2)$cond)
-
-
-# Assumptions verification
-# Compute simulated residuals for hurdle model
-residus_M5_F2 <- simulateResiduals(fittedModel = M5_F2)
-
-# Assumptions plot (distribution, homoscedasticity, dispersion)
-plot(residus_M5_F2)
-testDispersion(M5_F2)
-
-
-
-######## Models comparison #############
-anova(M1_F2, M2_F2, M3_F2, M3b_F2, M4_F2, M5_F2)
-
-# Global summary table of all models (exportation, article ready)
-tab_model(M1_F2, M2_F2, M3_F2, M3b_F2, M4_F2, M5_F2,
-          show.aic = TRUE,
-          show.zeroinf = TRUE,
-          show.intercept = FALSE,
-          transform = "exp",
-          dv.labels = c("Model 1", "Model 2", "Model 3", "Model 3Bis", "Model 4", "Model 5"),
-          pred.labels = c("AGE_centered" = "Age (centered)",
-                          "SEXEf" = "Sex (Woman)",
-                          "ANXIETE_recoded" = "Anxiety (HADS-A)",
-                          "DEPRESSION_recoded" = "Depression (HADS-D)",
-                          "MIGRAINEoui" = "Migraine (Yes)"),
-          file = here("Figures", "tableau_modeles_Factor2.doc"))
-
 
 
 #####################################################################
