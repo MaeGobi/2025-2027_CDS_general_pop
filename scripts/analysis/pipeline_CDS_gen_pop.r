@@ -91,6 +91,63 @@ for (col in anxdep) {
   cat (col, ": Aberrant values (>21):", av, "\n")
 }
 
+####################################################################################################
+# Items descriptives for figures
+####################################################################################################
+# Installation des packages si nécessaire
+library(openxlsx)
+
+# Fonction pour calculer les statistiques d'un item
+calculer_stats <- function(x) {
+  # Suppression des valeurs manquantes pour le calcul
+  x_clean <- x[!is.na(x)]
+  n_total <- length(x_clean)
+  
+  if (n_total == 0) {
+    return(c(
+      Moyenne = NA, Ecart_Type = NA, Mediane = NA,
+      P5 = NA, P25 = NA, P50 = NA, P75 = NA, P95 = NA,
+      Prop_Non_pct = NA, Prop_Oui_pct = NA
+    ))
+  }
+  
+  # Calcul des percentiles
+  q <- quantile(x_clean, probs = c(0.05, 0.25, 0.50, 0.75, 0.95), na.rm = TRUE)
+  
+  # Calcul des proportions
+  prop_non <- mean(x_clean == 0) * 100
+  prop_oui <- mean(x_clean != 0) * 100
+  
+  c(
+    Moyenne       = round(mean(x_clean), 2),
+    Ecart_Type    = round(sd(x_clean), 2),
+    Mediane       = round(median(x_clean), 2),
+    P5            = round(q[1], 2),
+    P25           = round(q[2], 2),
+    P50           = round(q[3], 2),
+    P75           = round(q[4], 2),
+    P95           = round(q[5], 2),
+    `Non (%)`     = round(prop_non, 1),
+    `Oui (%)`     = round(prop_oui, 1)
+  )
+}
+
+# 1. Application du calcul sur chaque item
+stats_matrix <- t(sapply(items, calculer_stats))
+
+# 2. Conversion en data.frame et ajout de la colonne 'Item'
+tableau_stats <- data.frame(
+  Item = rownames(stats_matrix),
+  stats_matrix,
+  row.names = NULL,
+  check.names = FALSE
+)
+
+# 3. Exportation vers un fichier Excel
+write.xlsx(tableau_stats, file = here("figures", "statistiques_items.xlsx"), overwrite = TRUE)
+
+# Affichage du résultat dans la console R
+print(tableau_stats)
 
 ##################################################################################################################
 # Visualization of variables distribution
