@@ -367,13 +367,33 @@ library(dplyr)
 library(flextable)
 library(here)
 
+df <- df %>%
+  mutate(
+    # 1. On regroupe les 0 et les 1 en un seul niveau (1)
+    ETUDES = case_when(
+      ETUDES %in% c(0, 1) ~ 1,
+      TRUE ~ ETUDES
+    ),
+    # 2. On convertit en facteur et on applique les labels
+    ETUDES = factor(
+      ETUDES,
+      levels = c(1, 2, 3, 4, 5),
+      labels = c("Level 1", "Level 2", "Level 3", "Level 4", "Level 5")
+    )
+  )
+
 # 1. Selection and recoding of variables
 df_table1 <- df %>%
   select(
-    AGE, SEXE, LATERALITE, PROFESSION, FAMILLE, 
+    AGE, SEXE, LATERALITE, ETUDES, PROFESSION, FAMILLE, 
     FUMEUR, ALCOOL, MIGRAINE, trouble_vision_global
   ) %>%
   mutate(
+    
+    # ETUDES
+    ETUDES = trimws(as.character(ETUDES)),
+    ETUDES = if_else(ETUDES == "" | ETUDES == "NA" | ETUDES == "NaN" | ETUDES == "#NUL!", NA_character_, ETUDES),
+    
     # PROFESSION
     PROFESSION = trimws(as.character(PROFESSION)),
     PROFESSION = if_else(PROFESSION == "" | PROFESSION == "NA" | PROFESSION == "NaN" | PROFESSION == "#NUL!", NA_character_, PROFESSION),
@@ -407,11 +427,15 @@ table_cohorte <- df_table1 %>%
       all_continuous() ~ "{mean} (± {sd})",
       all_categorical() ~ "{n} / {N} ({p}%)"
     ),
-    digits = list(all_continuous() ~ 2, all_categorical() ~ 1),
+    digits = list(
+      all_continuous() ~ 1,
+      all_categorical() ~ c(0, 0, 1) # 0 décimales pour n et N, 1 décimale pour le pourcentage (p)
+    ),
     label = list(
       AGE ~ "Age (years)",
       SEXE ~ "Sex",
       LATERALITE ~ "Laterality",
+      ETUDES ~ "Education level",
       PROFESSION ~ "Employment / Profession",
       FAMILLE ~ "Marital / Family status",
       FUMEUR ~ "Smoking status",
@@ -693,15 +717,16 @@ L  <- unclass(efa_result$loadings)[, 1:2]
 h2 <- efa_result$communality
 
 # Tri des items par facteur principal, puis par loading décroissant
-# (les items sans loading >= cut_bold sont placés à la fin)
 maxl <- apply(abs(L), 1, max)
 prim <- ifelse(maxl < cut_bold, 3, apply(abs(L), 1, which.max))
 ord  <- order(prim, -maxl)
 
+# Construction du tableau (ici on affiche toutes les valeurs, 
+# ou vous pouvez garder le filtre cut_show si vous préférez masquer les très faibles)
 t2 <- data.frame(
   Item = rownames(L)[ord],
-  F1   = ifelse(abs(L[ord, 1]) >= cut_show, fmt_d(L[ord, 1]), ""),
-  F2   = ifelse(abs(L[ord, 2]) >= cut_show, fmt_d(L[ord, 2]), ""),
+  F1   = fmt_d(L[ord, 1]),
+  F2   = fmt_d(L[ord, 2]),
   h2   = fmt_d(h2[ord])
 )
 
@@ -709,17 +734,20 @@ ft2 <- flextable(t2) %>%
   set_header_labels(F1 = "Factor 1", F2 = "Factor 2", h2 = "h²") %>%
   apa_style()
 
-# Gras pour les loadings >= cut_bold
+# Application du gras de manière indépendante pour chaque cellule de F1 (colonne 2) et F2 (colonne 3)
 for (r in seq_len(nrow(t2))) {
-  for (k in 1:2) {
-    if (abs(L[ord[r], k]) >= cut_bold) ft2 <- bold(ft2, i = r, j = k + 1)
+  if (abs(L[ord[r], 1]) >= cut_bold) {
+    ft2 <- bold(ft2, i = r, j = 2)
+  }
+  if (abs(L[ord[r], 2]) >= cut_bold) {
+    ft2 <- bold(ft2, i = r, j = 3)
   }
 }
 
 ft2 <- ft2 %>%
   add_footer_lines(sprintf(
-    "Note. N = %d. Minres extraction, promax rotation, Spearman correlations. Loadings < %s are omitted; loadings ≥ %s are in bold. h² = communality. Model fit: χ²(%d) = %.2f, %s; TLI = %s; RMSEA = %s [90%% CI %s, %s]; RMSR = %s.",
-    nrow(items), fmt_d(cut_show), fmt_d(cut_bold),
+    "Note. N = %d. Minres extraction, promax rotation, Spearman correlations. Loadings ≥ %s are in bold. h² = communality. Model fit: χ²(%d) = %.2f, %s; TLI = %s; RMSEA = %s [90%% CI %s, %s]; RMSR = %s.",
+    nrow(items), fmt_d(cut_bold),
     efa_result$dof, efa_result$STATISTIC, p_txt(efa_result$PVAL),
     fmt_d(efa_result$TLI, 3),
     fmt_d(efa_result$RMSEA[1], 3), fmt_d(efa_result$RMSEA[2], 3), fmt_d(efa_result$RMSEA[3], 3),
@@ -803,6 +831,73 @@ describe(df2$AGE_centered)
 #####################################################################
 # CDS total and anxiety/depression (HADS) according to sex
 #####################################################################
+df2$ANXIETE_recoded    <- as.numeric(as.character(df2$ANXIETE_recoded))
+df2$DEPRESSION_recoded <- as.numeric(as.character(df2$DEPRESSION_recoded))
+
+######### Mann-Whitney tests for CDS, Anx and Dep according to sex ############
+library(rstatix)
+
+# --- 1. Calcul automatisé des tests et tailles d'effet ---
+variables_a_tester <- c("CDS_total_sum", "ANXIETE_recoded", "DEPRESSION_recoded")
+
+mw_results <- lapply(variables_a_tester, function(var) {
+  # Test de Mann-Whitney (Wilcoxon rank-sum test)
+  test_res <- df %>% wilcox_test(as.formula(paste(var, "~ SEXE")), detailed = TRUE)
+  # Taille d'effet (r de Rosenthal)
+  eff_res  <- df %>% wilcox_effsize(as.formula(paste(var, "~ SEXE")))
+  
+  # Fusion des résultats
+  data.frame(
+    Variable = var,
+    W        = test_res$statistic,
+    p        = test_res$p,
+    r        = eff_res$effsize,
+    Magnitude= eff_res$magnitude
+  )
+}) %>% bind_rows()
+
+# --- 2. Fonctions de formatage APA / Flextable ---
+fmt_d <- function(x, d = 2) sub("^(-?)0\\.", "\\1.", sprintf(paste0("%.", d, "f"), x))
+p_txt <- function(p) ifelse(p < .001, "< .001", fmt_d(p, 3))
+
+# Noms lisibles pour les variables
+mw_results <- mw_results %>%
+  mutate(
+    Variable = case_when(
+      Variable == "CDS_total_sum" ~ "CDS Total Score",
+      Variable == "ANXIETE_recoded" ~ "Anxiety Score",
+      Variable == "DEPRESSION_recoded" ~ "Depression Score",
+      TRUE ~ Variable
+    ),
+    W = sprintf("%.1f", W),
+    p = sapply(p, p_txt),
+    r = sapply(r, fmt_d, d = 2)
+  )
+
+# --- 3. Création du tableau Word ---
+ft_mw <- flextable(mw_results) %>%
+  set_header_labels(
+    Variable  = "Outcome Variable",
+    W         = "Statistic (W)",
+    p         = "p",
+    r         = "Effect Size (r)",
+    Magnitude = "Magnitude"
+  ) %>%
+  theme_booktabs() %>%
+  align(align = "center", part = "all") %>%
+  align(j = 1, align = "left", part = "all") %>%
+  italic(j = c("p", "r"), part = "header") %>%
+  italic(j = "p", part = "body") %>%
+  font(fontname = "Times New Roman", part = "all") %>%
+  fontsize(size = 10, part = "all") %>%
+  fontsize(size = 9, part = "footer") %>%
+  add_footer_lines("Note. Mann-Whitney U tests were performed to compare scores by sex. Effect size r (Rosenthal) is interpreted as small (0.1), medium (0.3), or large (0.5).") %>%
+  autofit()
+
+# --- 4. Export vers Word ---
+save_as_docx(ft_mw, path = here("figures", "Table_MannWhitney_Sex.docx"))
+
+########## Violin plots ###################
 # Convertit une p-value en étoiles (ns si non significatif)
 p_to_stars_ns <- function(p) {
   case_when(p < 0.001 ~ "***",
@@ -811,8 +906,7 @@ p_to_stars_ns <- function(p) {
             TRUE      ~ "ns")
 }
 
-df2$ANXIETE_recoded    <- as.numeric(as.character(df2$ANXIETE_recoded))
-df2$DEPRESSION_recoded <- as.numeric(as.character(df2$DEPRESSION_recoded))
+
 
 # Libellés du sexe (h = homme est la référence, f = femme)
 df2$SEXE_lab <- factor(df2$SEXE, levels = c("h", "f"), labels = c("Men", "Women"))
@@ -955,6 +1049,8 @@ violin_hads
 
 ggsave(here("Figures", "violin_CDS_total_HADS.pdf"), violin_hads, width = 7, height = 4.5)
 ggsave(here("Figures", "violin_CDS_total_HADS.png"), violin_hads, width = 7, height = 4.5, dpi = 300)
+
+
 
 ###################################################################################################################
 # CDS Total Score
