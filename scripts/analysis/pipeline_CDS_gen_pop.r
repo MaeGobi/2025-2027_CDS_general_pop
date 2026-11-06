@@ -1318,6 +1318,8 @@ testDispersion(M3)
 library(performance)
 check_collinearity(M3)
 
+check_model(M3)
+
 #### Model 3bis : CDS ~AGE+SEX+ANXIETY+DEPRESSION ####
 M3b <- glmmTMB(
   CDS_total_sum ~ AGE_centered+SEXE+DEPRESSION_recoded,
@@ -1326,6 +1328,7 @@ M3b <- glmmTMB(
   data=df2)
 
 summary(M3b)
+
 
 # Exponential transformation of coefficients to interpret them as OR
 # For the binary effect (probability to have 0 = no symptom at all)
@@ -1346,6 +1349,7 @@ testDispersion(M3b)
 library(performance)
 check_collinearity(M3b)
 
+check_model(M3b)
 
 #### Model 4 : CDS ~AGE+SEX+ANXIETY+DEPRESSION ####
 M4 <- glmmTMB(
@@ -1375,6 +1379,8 @@ testDispersion(M4)
 library(performance)
 check_collinearity(M4)
 
+check_model(M4)
+
 #### Model 5 : CDS ~AGE+SEX+ANXIETY+DEPRESSION+MIGRAINE ####
 M5 <- glmmTMB(
   CDS_total_sum ~ AGE_centered+SEXE+ANXIETE_recoded+DEPRESSION_recoded+MIGRAINE,
@@ -1402,6 +1408,8 @@ testDispersion(M5)
 # VIF & tolerance/checks
 library(performance)
 check_collinearity(M5)
+
+check_model(M5)
 
 #### Model 6 : CDS ~AGE+SEX+ANXIETY+DEPRESSION+SEX*ANXIETY ####
 M6 <- glmmTMB(
@@ -1431,6 +1439,9 @@ testDispersion(M6)
 library(performance)
 check_collinearity(M6)
 
+check_model(M6)
+
+
 ################## Assumptions for all models #########################################
 # For the QQ plot, the observed values perfectly follow the predicted values and the Kolmogorov-Smirnov test of deviation from the theoretical distribution is
 # non significant, meaning that the residuals follow the expected distribution.
@@ -1459,11 +1470,11 @@ mon_tableau <- tab_model(M1, M2, M3, M3b, M4, M5,
 
 # 2. On remplace le texte d'en-tête dans le compartiment exact "page.complete" de notre variable
 mon_tableau$page.complete <- gsub("R<sup>2</sup> / R<sup>2</sup> adjusted", 
-                                  "Nagelkerke Pseudo-R<sup>2</sup>", 
+                                  "Pseudo-R<sup>2</sup> (Zero-Inflated)", 
                                   mon_tableau$page.complete)
 
 # 3. On exporte manuellement le tableau modifié en fichier Word
-writeLines(mon_tableau$page.complete, here("Figures", "tableau_modeles_CDS_tot.doc"))
+writeLines(mon_tableau$page.complete, here("Figures", "tableau_modeles_CDS_tot_rev.doc"))
 
 
 
