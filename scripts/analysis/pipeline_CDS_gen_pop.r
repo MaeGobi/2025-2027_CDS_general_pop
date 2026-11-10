@@ -164,7 +164,7 @@ summary(df[num_cols])
 describe(df$CDS_total_sum)
 
 print(paste("Number of participants above CDS cutoff (70) :", sum(df$CDS_total_sum > 70)))
-print(paste("Proportion of participants above CDS cutoff (70) :", round((sum(df$CDS_total_sum > 70)/nrow(df))*100, 2), "%"))
+print(paste("Proportion of participants above CDS cutoff (70) :", round((sum(df$CDS_total_sum > 70)/nrow(df))*100, 3), "%"))
 
 ####### Plot numerical variables distribution #######
 
@@ -834,7 +834,12 @@ describe(df2$AGE_centered)
 df2$ANXIETE_recoded    <- as.numeric(as.character(df2$ANXIETE_recoded))
 df2$DEPRESSION_recoded <- as.numeric(as.character(df2$DEPRESSION_recoded))
 
+
 ######### Mann-Whitney tests for CDS, Anx and Dep according to sex ############
+describeBy(df$CDS_total_sum, group = df$SEXE)
+describeBy(df$ANXIETE_recoded, group = df$SEXE)
+describeBy(df$DEPRESSION_recoded, group = df$SEXE)
+
 library(rstatix)
 
 # --- 1. Calcul automatisé des tests et tailles d'effet ---
@@ -1108,7 +1113,7 @@ ggsave(here("figures", "distrib_CDS_transformed.png"), width=8, height=6, dpi=30
 
 ########## Test of classical regression model #########
 ### Modèle 1 ###
-Model_1 <- lm(CDS_tot_log~ AGE, na.action = na.exclude, data=df2) # or CDS_tot_log or CDS_tot_sqrt
+Model_1 <- lm(CDS_total_sum~ AGE, na.action = na.exclude, data=df2) # or CDS_tot_log or CDS_tot_sqrt
 summary(Model_1)
 
 # Vérification des prérequis
@@ -1453,28 +1458,35 @@ check_model(M6)
 ######## Models comparison #############
 anova(M1, M2, M3, M3b, M4, M5)
 
-# Global summary table of all models (exportation, article ready)
-# 1. On stocke le tableau dans une variable nommée "mon_tableau" (Notez le "mon_tableau <- " au début)
+mods <- list(M1, M2, M3, M3b, M4, M5)
+
 mon_tableau <- tab_model(M1, M2, M3, M3b, M4, M5,
-                         show.aic = TRUE,
-                         show.zeroinf = TRUE,
-                         show.intercept = FALSE,
+                         show.aic = FALSE, show.r2 = FALSE,
+                         show.zeroinf = TRUE, show.intercept = FALSE,
                          transform = "exp",
-                         dv.labels = c("Model 1", "Model 2", "Model 3", "Model 3Bis", "Model 4", "Model 5"),
+                         dv.labels = c("Model 1", "Model 2", "Model 3",
+                                       "Model 3Bis", "Model 4", "Model 5"),
                          pred.labels = c("AGE_centered" = "Age (centered)",
                                          "SEXEf" = "Sex (Woman)",
                                          "ANXIETE_recoded" = "Anxiety (HADS-A)",
                                          "DEPRESSION_recoded" = "Depression (HADS-D)",
                                          "MIGRAINEoui" = "Migraine (Yes)"))
 
+make_row <- function(label, vals) paste0(
+  "  <tr>\n    <td class=\"tdata leftalign summary\">", label, "</td>\n",
+  paste0("    <td class=\"tdata summary summarydata\" colspan=\"3\">", vals, "</td>\n",
+         collapse = ""),
+  "  </tr>\n")
 
-# 2. On remplace le texte d'en-tête dans le compartiment exact "page.complete" de notre variable
-mon_tableau$page.complete <- gsub("R<sup>2</sup> / R<sup>2</sup> adjusted", 
-                                  "Pseudo-R<sup>2</sup> (Zero-Inflated)", 
-                                  mon_tableau$page.complete)
+fit_rows <- paste0(
+  make_row("AIC", sprintf("%.3f", sapply(mods, AIC))),
+  make_row("BIC", sprintf("%.3f", sapply(mods, BIC)))
+)
 
-# 3. On exporte manuellement le tableau modifié en fichier Word
-writeLines(mon_tableau$page.complete, here("Figures", "tableau_modeles_CDS_tot_rev.doc"))
+mon_tableau$page.complete <- sub("</table>", paste0(fit_rows, "</table>"),
+                                 mon_tableau$page.complete, fixed = TRUE)
+
+writeLines(mon_tableau$page.complete, here("Figures", "tableau_modeles_CDS_tot_rev2.doc"))
 
 
 
