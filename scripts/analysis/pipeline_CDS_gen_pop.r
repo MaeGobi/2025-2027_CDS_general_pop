@@ -28,23 +28,20 @@ nrow(df_raw)
 # Transform df to exclude rows from VESTICOR study
 df_raw2 <- df_raw[1:665, ]
 nrow(df_raw2)
+table(df_raw2$INCLUSION_CDS_VALIDATION)
 as.data.frame(table(df_raw2$raison_exclusion))
 as.data.frame(table(df_raw2$Difference_sum))
 
 inclus <- df_raw2$INCLUSION_CDS_VALIDATION==1
 df <- df_raw2[inclus,]
 nrow(df)
+table(df$INCLUSION_CDS_VALIDATION)
+table(df$raison_exclusion)
 as.data.frame(table(df$Difference_sum))
 
-df$MIGRAINE[df$MIGRAINE == ""] <- NA
-df$MIGRAINE <- factor(df$MIGRAINE)
-
-table(df$MIGRAINE, useNA = "ifany")
-levels(df$MIGRAINE)
-
 df$SEXE <- relevel(factor(df$SEXE), ref="h")
-levels(df$SEXE)
-
+df$MIGRAINE <- relevel(factor(df$MIGRAINE), ref="non")
+              
 
 ##################################################################################################################
 # Preprocessing
@@ -61,6 +58,10 @@ cols_int <- c("SEXE", "LATERALITE", "AGE", "PROFESSION", "FAMILLE", "FUMEUR", "M
 
 # Count number of missing/empty values for each interest column
 colSums(is.na(df[cols_int]) | df[cols_int]=="" |is.null(df[cols_int]))
+
+df %>%
+  filter(if_any(c(ANXIETE_recoded, DEPRESSION_recoded, MIGRAINE), is.na)) %>%
+  nrow()
 
 # Display row number of missing/empty values for each variable
 missing <- sapply(df[cols_int], function(x) which(is.na(x) | x == "" | is.null(x)) + 1)
@@ -94,7 +95,6 @@ for (col in anxdep) {
 ####################################################################################################
 # Items descriptives for figures
 ####################################################################################################
-# Installation des packages si nécessaire
 library(openxlsx)
 
 # Fonction pour calculer les statistiques d'un item
@@ -162,6 +162,7 @@ df[num_cols] <- lapply(df[num_cols], function(x) as.numeric(as.character(x)))
 summary(df[num_cols])
 
 describe(df$CDS_total_sum)
+quantile(df$CDS_total_sum)
 
 print(paste("Number of participants above CDS cutoff (70) :", sum(df$CDS_total_sum > 70)))
 print(paste("Proportion of participants above CDS cutoff (70) :", round((sum(df$CDS_total_sum > 70)/nrow(df))*100, 3), "%"))
@@ -366,20 +367,12 @@ library(gtsummary)
 library(dplyr)
 library(flextable)
 library(here)
+library(forcats)
 
 df <- df %>%
   mutate(
-    # 1. On regroupe les 0 et les 1 en un seul niveau (1)
-    ETUDES = case_when(
-      ETUDES %in% c(0, 1) ~ 1,
-      TRUE ~ ETUDES
-    ),
-    # 2. On convertit en facteur et on applique les labels
-    ETUDES = factor(
-      ETUDES,
-      levels = c(1, 2, 3, 4, 5),
-      labels = c("Level 1", "Level 2", "Level 3", "Level 4", "Level 5")
-    )
+    ETUDES = fct_collapse(ETUDES, "1" = c("0", "1")),
+    ETUDES = factor(ETUDES, levels = 1:5, labels = paste("Level", 1:5))
   )
 
 # 1. Selection and recoding of variables
@@ -428,7 +421,7 @@ table_cohorte <- df_table1 %>%
       all_categorical() ~ "{n} / {N} ({p}%)"
     ),
     digits = list(
-      all_continuous() ~ 1,
+      all_continuous() ~ 2,
       all_categorical() ~ c(0, 0, 1) # 0 décimales pour n et N, 1 décimale pour le pourcentage (p)
     ),
     label = list(
@@ -544,8 +537,8 @@ for (type in c("Spearman", "Pearson")) {
     fit_k <- data.frame(
       Methode     = type,
       Facteurs    = k,
-      Chi_deux    = round(modele$chi, 2),
-      p_value     = round(modele$PVAL, 4),
+      Chi_deux = round(modele$STATISTIC, 2),
+      p_value  = round(modele$PVAL, 4),
       TLI         = round(modele$TLI, 3),
       RMSR        = round(modele$rms, 3),
       RMSEA       = round(modele$RMSEA[1], 3),     
@@ -563,7 +556,7 @@ print(compare_table, row.names = FALSE)
 # Loop to display factor loadings for EFA with 1 to 3 factors with Spearman correlations
 for (k in 1 :3) {
   cat("Exploratory Factor Analysis")
-  model_k <- fa(mat_spearman, nfactors = k, n.obs = n_sujets, fm="minres", rotation ="promax")
+  model_k <- fa(items, nfactors = k, n.obs = n_sujets, fm="minres", rotate ="promax", cor="spearman")
   print(model_k$loadings, cutoff=0.4)
 }
 
@@ -573,11 +566,12 @@ for (k in 1 :3) {
 ###### Final EFA model selected based on previous explorations #####
 #### EFA with 3 factors, spearman correlations, promax rotation (correlated factors) and minres estimator
 efa_result <- fa(items, n.obs = nrows(items), nfactors = 2, rotate = "promax", fm = "minres", cor="spearman")
+print(efa_result)
 print(efa_result$loadings, cutoff = 0.4, digits = 3)
 
 fit_metrics <- data.frame(
-  Chi2     = round(efa_result$chi, 2),
-  df       = round(efa_result$dof,2),
+  Chi2     = round(efa_result$STATISTIC, 2),
+  df       = efa_result$dof,
   p_value  = round(efa_result$PVAL, 4),
   TLI      = round(efa_result$TLI, 3),
   RMSR     = round(efa_result$rms, 3),
@@ -785,9 +779,12 @@ ft3 <- flextable(t3) %>%
 #####################################################################
 rel_row <- function(x, label) {
   a  <- psych::alpha(x, check.keys = FALSE, warnings = FALSE)
+  r <- psych::reliability(items=x, nfactors=1)
   sh <- psych::splitHalf(x)
   data.frame(Scale = label, Items = ncol(x),
-             alpha = fmt_d(a$total$raw_alpha, 2),
+             alpha = paste0(fmt_d(a$total$raw_alpha, 2), " [", fmt_d(a$feldt$lower.ci, 2), "-",
+                               fmt_d(a$feldt$upper.ci, 2), "]"),
+             omega = fmt_d(r$result.df[1, "omega.tot"]),
              mean_r = fmt_d(a$total$average_r, 2),
              split = fmt_d(sh$meanr, 2))
 }
@@ -798,7 +795,9 @@ t4 <- bind_rows(rel_row(CDS,      "CDS total"),
 
 ft4 <- flextable(t4) %>%
   set_header_labels(Scale = "Scale", Items = "Number of items",
-                    alpha = "Cronbach's α", mean_r = "Mean inter-item r",
+                    alpha = "Cronbach's α [95% CI]",
+                    omega = "Total ω",
+                    mean_r = "Mean inter-item r",
                     split = "Mean split-half") %>%
   apa_style() %>%
   finish()
@@ -996,6 +995,15 @@ df2$DEP_grp <- factor(ifelse(df2$DEPRESSION_recoded >= 8, "≥ 8", "< 8"),
 
 table(df2$ANX_grp)
 table(df2$DEP_grp)
+
+describeBy(df2$CDS_total_sum, group = df2$ANX_grp)
+wilcox_test(df2, CDS_total_sum ~ ANX_grp)
+wilcox_effsize(df2, CDS_total_sum ~ ANX_grp)
+
+describeBy(df2$CDS_total_sum, group = df2$DEP_grp)
+wilcox_test(df2, CDS_total_sum ~ DEP_grp)
+wilcox_effsize(df2, CDS_total_sum ~ DEP_grp)
+
 
 # Convertit une p-value en étoiles (ns si non significatif)
 p_to_stars_ns <- function(p) {
@@ -1458,19 +1466,30 @@ check_model(M6)
 ######## Models comparison #############
 anova(M1, M2, M3, M3b, M4, M5)
 
-mods <- list(M1, M2, M3, M3b, M4, M5)
+mods <- list("Model 1"    = M1,
+                "Model 2"    = M2,
+                "Model 3"    = M3,
+                "Model 3Bis" = M3b,
+                "Model 4"    = M4,
+                "Model 5"    = M5)
+
+# Contrôle : à comparer avec la console
+print(data.frame(Model = names(mods),
+                 AIC   = round(sapply(mods, AIC), 3),
+                 BIC   = round(sapply(mods, BIC), 3),
+                 N     = sapply(mods, nobs)),
+      row.names = FALSE)
 
 mon_tableau <- tab_model(M1, M2, M3, M3b, M4, M5,
                          show.aic = FALSE, show.r2 = FALSE,
                          show.zeroinf = TRUE, show.intercept = FALSE,
                          transform = "exp",
-                         dv.labels = c("Model 1", "Model 2", "Model 3",
-                                       "Model 3Bis", "Model 4", "Model 5"),
-                         pred.labels = c("AGE_centered" = "Age (centered)",
-                                         "SEXEf" = "Sex (Woman)",
-                                         "ANXIETE_recoded" = "Anxiety (HADS-A)",
+                         dv.labels = names(mods),
+                         pred.labels = c("AGE_centered"       = "Age (centered)",
+                                         "SEXEf"              = "Sex (Woman)",
+                                         "ANXIETE_recoded"    = "Anxiety (HADS-A)",
                                          "DEPRESSION_recoded" = "Depression (HADS-D)",
-                                         "MIGRAINEoui" = "Migraine (Yes)"))
+                                         "MIGRAINEoui"        = "Migraine (Yes)"))
 
 make_row <- function(label, vals) paste0(
   "  <tr>\n    <td class=\"tdata leftalign summary\">", label, "</td>\n",
@@ -1486,8 +1505,8 @@ fit_rows <- paste0(
 mon_tableau$page.complete <- sub("</table>", paste0(fit_rows, "</table>"),
                                  mon_tableau$page.complete, fixed = TRUE)
 
-writeLines(mon_tableau$page.complete, here("Figures", "tableau_modeles_CDS_tot_rev2.doc"))
-
+writeLines(mon_tableau$page.complete,
+           here("Figures", "tableau_modeles_CDS_tot_rev2.doc"))
 
 
 ### ==========================================================
@@ -1579,12 +1598,12 @@ make_forest <- function(data, title, xlab, x_breaks = c(0, 1, 2), x_max = 2.5) {
     # Stars: fixed column at the right edge of the plotting area
     geom_text(
       aes(x = x_max - 0.05, label = stars),
-      hjust = 1, vjust = 0.75, size = 5, color = "black"
+      hjust = 1, vjust = 0.75, size = 5, color = "black", family="Arial"
     ) +
     scale_x_continuous(breaks = x_breaks, expand = c(0, 0)) +
     coord_cartesian(xlim = c(0, x_max)) +
     labs(title = title, x = xlab, y = NULL) +
-    theme_classic(base_size = 12) +
+    theme_classic(base_size = 12, family="Arial") +
     theme(
       plot.title         = element_text(face = "bold", size = 11, hjust = 0),
       axis.text.y        = element_text(color = "black", size = 11),
@@ -1622,8 +1641,8 @@ combined_plot <- p_occurrence / p_intensity +
 
 print(combined_plot)
 
-ggsave(here("Figures", "forest_plot_hurdle_CDS_tot.pdf"), combined_plot, width = 5, height = 5.5, units = "in")
-ggsave(here("Figures", "forest_plot_hurdle_CDS_tot.png"), combined_plot, width = 5, height = 5.5, units = "in", dpi = 300)
+ggsave(here("Figures", "forest_plot_hurdle_CDS_tot2.pdf"), combined_plot, width = 5, height = 5.5, units = "in")
+ggsave(here("Figures", "forest_plot_hurdle_CDS_tot2.png"), combined_plot, width = 5, height = 5.5, units = "in", dpi = 300)
 
 ### ==========================================================
 ### Forest plot (3 panels) - hurdle model (glmmTMB) - CDS total
@@ -1732,7 +1751,7 @@ make_forest <- function(data, title, xlab, x_breaks = c(0, 1, 2), x_max = 2.5) {
     scale_x_continuous(breaks = x_breaks, expand = c(0, 0)) +
     coord_cartesian(xlim = c(0, x_max)) +
     labs(title = title, x = xlab, y = NULL) +
-    theme_classic(base_size = 12) +
+    theme_classic(base_size = 12, family="Arial") +
     theme(
       plot.title         = element_text(face = "bold", size = 10, hjust = 0),
       axis.text.y        = element_text(color = "black", size = 10),
@@ -1782,6 +1801,150 @@ ggsave(here("Figures", "forest_plot_hurdle_CDS_tot_invOR.pdf"), combined_plot, w
 ggsave(here("Figures", "forest_plot_hurdle_CDS_tot_invOR.png"), combined_plot, width = 6, height = 7.5, units = "in", dpi = 300)
 # La hauteur a été augmentée à 7.5 pouces pour accueillir le 3e panneau
 
+
+
+### ==========================================================
+### Forest plot (2 panels) - hurdle model (glmmTMB) - CDS total
+### Panel A: Presence of symptoms P(Y > 0)   (inverted zi) -> OR
+### Panel B: Intensity           Y | Y > 0  (count)        -> IRR
+### + significance stars (* p<.05, ** p<.01, *** p<.001)
+### ==========================================================
+
+library(glmmTMB)
+library(broom.mixed)
+library(dplyr)
+library(ggplot2)
+library(patchwork)
+library(here)
+
+# --------------------------------------------------------------
+# 0. Helper: p-value -> stars
+# --------------------------------------------------------------
+p_to_stars <- function(p) {
+  case_when(
+    is.na(p)  ~ "",
+    p < 0.001 ~ "***",
+    p < 0.01  ~ "**",
+    p < 0.05  ~ "*",
+    TRUE      ~ ""
+  )
+}
+
+# --------------------------------------------------------------
+# 1. Extract fixed effects
+# --------------------------------------------------------------
+tidy_intensity <- broom.mixed::tidy(
+  M4, effects = "fixed", component = "cond",
+  conf.int = TRUE, exponentiate = TRUE
+) %>%
+  filter(term != "(Intercept)")
+
+tidy_absence <- broom.mixed::tidy(
+  M4, effects = "fixed", component = "zi",
+  conf.int = TRUE, exponentiate = TRUE
+) %>%
+  filter(term != "(Intercept)")
+
+# Panel A: P(Y > 0), multiplicative inversion (1 / OR); p-values unchanged
+tidy_presence <- tidy_absence %>%
+  mutate(
+    conf_low_raw  = conf.low,
+    conf_high_raw = conf.high,
+    estimate  = 1 / estimate,
+    conf.low  = 1 / conf_high_raw,
+    conf.high = 1 / conf_low_raw
+  )
+
+# --------------------------------------------------------------
+# 2. Relabel predictors + compute stars
+# --------------------------------------------------------------
+label_map <- c(
+  "AGE_centered"       = "Age (centered)",
+  "SEXEf"              = "Sex (female vs. male)",
+  "ANXIETE_recoded"    = "Anxiety (HADS-A)",
+  "DEPRESSION_recoded" = "Depression (HADS-D)"
+)
+
+prepare_data <- function(df) {
+  df %>%
+    mutate(
+      label_text = ifelse(term %in% names(label_map), label_map[term], term),
+      stars      = p_to_stars(p.value)
+    ) %>%
+    mutate(label = factor(label_text, levels = rev(unique(label_text))))
+}
+
+tidy_intensity <- prepare_data(tidy_intensity)
+tidy_presence  <- prepare_data(tidy_presence)
+
+# --------------------------------------------------------------
+# 3. Forest plot function
+# --------------------------------------------------------------
+make_forest <- function(data, title, xlab, x_breaks = c(0, 1, 2), x_max = 2.5) {
+  
+  n_labels <- nlevels(data$label)
+  bg_rects <- data.frame(y = seq_len(n_labels)) %>%
+    filter(y %% 2 == 1)
+  
+  ggplot(data, aes(x = estimate, y = label)) +
+    geom_rect(
+      data = bg_rects,
+      aes(ymin = y - 0.5, ymax = y + 0.5, xmin = -Inf, xmax = Inf),
+      fill = "grey94",
+      inherit.aes = FALSE
+    ) +
+    geom_vline(xintercept = 1, linetype = "dashed", color = "grey45", linewidth = 0.5) +
+    geom_errorbar(
+      aes(xmin = conf.low, xmax = conf.high),
+     width = 0.15, color = "black", linewidth = 0.6
+    ) +
+    geom_point(size = 2, shape = 19, color = "black") +
+    # Stars: fixed column at the right edge of the plotting area
+    geom_text(
+      aes(x = x_max - 0.05, label = stars),
+      hjust = 1, vjust = 0.75, size = 5, color = "black", family="Arial"
+    ) +
+    scale_x_continuous(breaks = x_breaks, expand = c(0, 0)) +
+    coord_cartesian(xlim = c(0, x_max)) +
+    labs(title = title, x = xlab, y = NULL) +
+    theme_classic(base_size = 12) +
+    theme(
+      plot.title         = element_text(face = "bold", size = 10, hjust = 0, family="Arial"),
+      axis.text.y        = element_text(color = "black", size = 10, family="Arial"),
+      axis.text.x        = element_text(color = "black", size = 9, family="Arial"),
+      axis.title.x       = element_text(size = 10, family="Arial"),
+      axis.line          = element_line(linewidth = 0.3),
+      axis.ticks         = element_line(linewidth = 0.3),
+      panel.grid.major.y = element_blank(),
+      panel.grid.minor   = element_blank()
+    )
+}
+
+# --------------------------------------------------------------
+# 4. Build the three panels
+# --------------------------------------------------------------
+p_presence <- make_forest(
+  tidy_presence,
+  title = "A. Occurrence component: Presence of symptoms [P(Y > 0)]",
+  xlab  = "Odds Ratio (95% CI)"
+)
+
+p_intensity <- make_forest(
+  tidy_intensity,
+  title = "B. Intensity component: Symptom severity [Y | Y > 0]",
+  xlab  = "Incidence Rate Ratio (95% CI)"
+)
+
+# --------------------------------------------------------------
+# 5. Stack panels, add caption, export
+# --------------------------------------------------------------
+combined_plot <- p_presence / p_intensity +
+  plot_layout(heights = c(1, 1))
+
+print(combined_plot)
+
+ggsave(here("Figures", "forest_plot_hurdle_CDS_tot_pres.pdf"), combined_plot,  height = 6, width = 6, dpi=300)
+ggsave(here("Figures", "forest_plot_hurdle_CDS_tot_pres.png"), combined_plot,  height = 6, width = 6, dpi = 300)
 
 
 
@@ -2089,23 +2252,50 @@ check_collinearity(M5_F1)
 ######## Models comparison #############
 anova(M1_F1, M2_F1, M3_F1, M3b_F1, M4_F1, M5_F1)
 
-# Global summary table of all models (exportation, article ready)
-tab_model(M1_F1, M2_F1, M3_F1, M3b_F1, M4_F1, M5_F1,
-          show.aic = TRUE,
-          show.zeroinf = TRUE,
-          show.intercept = FALSE,
-          transform = "exp",
-          dv.labels = c("Model 1", "Model 2", "Model 3", "Model 3Bis", "Model 4", "Model 5"),
-          pred.labels = c("AGE_centered" = "Age (centered)",
-                          "SEXEf" = "Sex (Woman)",
-                          "ANXIETE_recoded" = "Anxiety (HADS-A)",
-                          "DEPRESSION_recoded" = "Depression (HADS-D)",
-                          "MIGRAINEoui" = "Migraine (Yes)"),
-          file = here("Figures", "tableau_modeles_Factor1.doc"))
+mods_F1 <- list("Model 1"    = M1_F1,
+                "Model 2"    = M2_F1,
+                "Model 3"    = M3_F1,
+                "Model 3Bis" = M3b_F1,
+                "Model 4"    = M4_F1,
+                "Model 5"    = M5_F1)
 
+# Contrôle : à comparer avec la console
+print(data.frame(Model = names(mods_F1),
+                 AIC   = round(sapply(mods_F1, AIC), 3),
+                 BIC   = round(sapply(mods_F1, BIC), 3),
+                 N     = sapply(mods_F1, nobs)),
+      row.names = FALSE)
 
+mon_tableau <- tab_model(M1_F1, M2_F1, M3_F1, M3b_F1, M4_F1, M5_F1,
+                         show.aic = FALSE, show.r2 = FALSE,
+                         show.zeroinf = TRUE, show.intercept = FALSE,
+                         transform = "exp",
+                         dv.labels = names(mods_F1),
+                         pred.labels = c("AGE_centered"       = "Age (centered)",
+                                         "SEXEf"              = "Sex (Woman)",
+                                         "ANXIETE_recoded"    = "Anxiety (HADS-A)",
+                                         "DEPRESSION_recoded" = "Depression (HADS-D)",
+                                         "MIGRAINEoui"        = "Migraine (Yes)"))
 
+make_row <- function(label, vals) paste0(
+  "  <tr>\n    <td class=\"tdata leftalign summary\">", label, "</td>\n",
+  paste0("    <td class=\"tdata summary summarydata\" colspan=\"3\">", vals, "</td>\n",
+         collapse = ""),
+  "  </tr>\n")
 
+fit_rows <- paste0(
+  make_row("AIC", sprintf("%.3f", sapply(mods_F1, AIC))),
+  make_row("BIC", sprintf("%.3f", sapply(mods_F1, BIC)))
+)
+
+mon_tableau$page.complete <- sub("</table>", paste0(fit_rows, "</table>"),
+                                 mon_tableau$page.complete, fixed = TRUE)
+
+writeLines(mon_tableau$page.complete,
+           here("Figures", "tableau_modeles_CDS_F1_rev2.doc"))
+
+library(parameters)
+model_parameters(M4_F1, exponentiate = TRUE, component = "all", digits = 3)
 
 ### ==========================================================
 ### Forest plot (2 panels) - hurdle model (glmmTMB) - Factor 1 CDS
@@ -2400,6 +2590,150 @@ ggsave(here("Figures", "forest_plot_hurdle_CDS_F1_invOR.png"), combined_plot, wi
 
 
 
+### ==========================================================
+### Forest plot (2 panels) - hurdle model (glmmTMB) - CDS total
+### Panel A: Presence of symptoms P(Y > 0)   (inverted zi) -> OR
+### Panel B: Intensity           Y | Y > 0  (count)        -> IRR
+### + significance stars (* p<.05, ** p<.01, *** p<.001)
+### ==========================================================
+
+library(glmmTMB)
+library(broom.mixed)
+library(dplyr)
+library(ggplot2)
+library(patchwork)
+library(here)
+
+# --------------------------------------------------------------
+# 0. Helper: p-value -> stars
+# --------------------------------------------------------------
+p_to_stars <- function(p) {
+  case_when(
+    is.na(p)  ~ "",
+    p < 0.001 ~ "***",
+    p < 0.01  ~ "**",
+    p < 0.05  ~ "*",
+    TRUE      ~ ""
+  )
+}
+
+# --------------------------------------------------------------
+# 1. Extract fixed effects
+# --------------------------------------------------------------
+tidy_intensity <- broom.mixed::tidy(
+  M4_F1, effects = "fixed", component = "cond",
+  conf.int = TRUE, exponentiate = TRUE
+) %>%
+  filter(term != "(Intercept)")
+
+tidy_absence <- broom.mixed::tidy(
+  M4_F1, effects = "fixed", component = "zi",
+  conf.int = TRUE, exponentiate = TRUE
+) %>%
+  filter(term != "(Intercept)")
+
+# Panel A: P(Y > 0), multiplicative inversion (1 / OR); p-values unchanged
+tidy_presence <- tidy_absence %>%
+  mutate(
+    conf_low_raw  = conf.low,
+    conf_high_raw = conf.high,
+    estimate  = 1 / estimate,
+    conf.low  = 1 / conf_high_raw,
+    conf.high = 1 / conf_low_raw
+  )
+
+# --------------------------------------------------------------
+# 2. Relabel predictors + compute stars
+# --------------------------------------------------------------
+label_map <- c(
+  "AGE_centered"       = "Age (centered)",
+  "SEXEf"              = "Sex (female vs. male)",
+  "ANXIETE_recoded"    = "Anxiety (HADS-A)",
+  "DEPRESSION_recoded" = "Depression (HADS-D)"
+)
+
+prepare_data <- function(df) {
+  df %>%
+    mutate(
+      label_text = ifelse(term %in% names(label_map), label_map[term], term),
+      stars      = p_to_stars(p.value)
+    ) %>%
+    mutate(label = factor(label_text, levels = rev(unique(label_text))))
+}
+
+tidy_intensity <- prepare_data(tidy_intensity)
+tidy_presence  <- prepare_data(tidy_presence)
+
+# --------------------------------------------------------------
+# 3. Forest plot function
+# --------------------------------------------------------------
+make_forest <- function(data, title, xlab, x_breaks = c(0, 1, 2), x_max = 2.5) {
+  
+  n_labels <- nlevels(data$label)
+  bg_rects <- data.frame(y = seq_len(n_labels)) %>%
+    filter(y %% 2 == 1)
+  
+  ggplot(data, aes(x = estimate, y = label)) +
+    geom_rect(
+      data = bg_rects,
+      aes(ymin = y - 0.5, ymax = y + 0.5, xmin = -Inf, xmax = Inf),
+      fill = "grey94",
+      inherit.aes = FALSE
+    ) +
+    geom_vline(xintercept = 1, linetype = "dashed", color = "grey45", linewidth = 0.5) +
+    geom_errorbar(
+      aes(xmin = conf.low, xmax = conf.high),
+      width = 0.15, color = "black", linewidth = 0.6
+    ) +
+    geom_point(size = 3, shape = 19, color = "black") +
+    # Stars: fixed column at the right edge of the plotting area
+    geom_text(
+      aes(x = x_max - 0.05, label = stars),
+      hjust = 1, vjust = 0.75, size = 5, color = "black", family="Arial"
+    ) +
+    scale_x_continuous(breaks = x_breaks, expand = c(0, 0)) +
+    coord_cartesian(xlim = c(0, x_max)) +
+    labs(title = title, x = xlab, y = NULL) +
+    theme_classic(base_size = 12) +
+    theme(
+      plot.title         = element_text(face = "bold", size = 10, hjust = 0, family="Arial"),
+      axis.text.y        = element_text(color = "black", size = 10, family="Arial"),
+      axis.text.x        = element_text(color = "black", size = 9, family="Arial"),
+      axis.title.x       = element_text(size = 10, family="Arial"),
+      axis.line          = element_line(linewidth = 0.3),
+      axis.ticks         = element_line(linewidth = 0.3),
+      panel.grid.major.y = element_blank(),
+      panel.grid.minor   = element_blank()
+    )
+}
+
+# --------------------------------------------------------------
+# 4. Build the panels
+# --------------------------------------------------------------
+p_presence <- make_forest(
+  tidy_presence,
+  title = "A. Occurrence component: Presence of symptoms [P(Y > 0)]",
+  xlab  = "Odds Ratio (95% CI)"
+)
+
+p_intensity <- make_forest(
+  tidy_intensity,
+  title = "B. Intensity component: Symptom severity [Y | Y > 0]",
+  xlab  = "Incidence Rate Ratio (95% CI)"
+)
+
+# --------------------------------------------------------------
+# 5. Stack panels, add caption, export
+# --------------------------------------------------------------
+combined_plot <- p_presence / p_intensity +
+  plot_layout(heights = c(1, 1))
+
+print(combined_plot)
+
+ggsave(here("Figures", "forest_plot_hurdle_CDS_F1_pres.pdf"), combined_plot, height = 6, width = 6, units = "in")
+ggsave(here("Figures", "forest_plot_hurdle_CDS_F1_pres.png"), combined_plot, height = 6, width = 6, units = "in", dpi = 300)
+
+
 ########################################################################################
 # Hierarchical Hurdle Models for FACTOR 2
 ########################################################################################
@@ -2596,20 +2930,51 @@ check_collinearity(M5_F2)
 ######## Models comparison #############
 anova(M1_F2, M2_F2, M3_F2, M3b_F2, M4_F2, M5_F2)
 
-# Global summary table of all models (exportation, article ready)
-tab_model(M1_F2, M2_F2, M3_F2, M3b_F2, M4_F2, M5_F2,
-          show.aic = TRUE,
-          show.zeroinf = TRUE,
-          show.intercept = FALSE,
-          transform = "exp",
-          dv.labels = c("Model 1", "Model 2", "Model 3", "Model 3Bis", "Model 4", "Model 5"),
-          pred.labels = c("AGE_centered" = "Age (centered)",
-                          "SEXEf" = "Sex (Woman)",
-                          "ANXIETE_recoded" = "Anxiety (HADS-A)",
-                          "DEPRESSION_recoded" = "Depression (HADS-D)",
-                          "MIGRAINEoui" = "Migraine (Yes)"),
-          file = here("Figures", "tableau_modeles_Factor2.doc"))
 
+mods_F2 <- list("Model 1"    = M1_F2,
+                "Model 2"    = M2_F2,
+                "Model 3"    = M3_F2,
+                "Model 3Bis" = M3b_F2,
+                "Model 4"    = M4_F2,
+                "Model 5"    = M5_F2)
+
+# Contrôle : à comparer avec la console
+print(data.frame(Model = names(mods_F2),
+                 AIC   = round(sapply(mods_F2, AIC), 3),
+                 BIC   = round(sapply(mods_F2, BIC), 3),
+                 N     = sapply(mods_F2, nobs)),
+      row.names = FALSE)
+
+mon_tableau <- tab_model(M1_F2, M2_F2, M3_F2, M3b_F2, M4_F2, M5_F2,
+                         show.aic = FALSE, show.r2 = FALSE,
+                         show.zeroinf = TRUE, show.intercept = FALSE,
+                         transform = "exp",
+                         dv.labels = names(mods_F2),
+                         pred.labels = c("AGE_centered"       = "Age (centered)",
+                                         "SEXEf"              = "Sex (Woman)",
+                                         "ANXIETE_recoded"    = "Anxiety (HADS-A)",
+                                         "DEPRESSION_recoded" = "Depression (HADS-D)",
+                                         "MIGRAINEoui"        = "Migraine (Yes)"))
+
+make_row <- function(label, vals) paste0(
+  "  <tr>\n    <td class=\"tdata leftalign summary\">", label, "</td>\n",
+  paste0("    <td class=\"tdata summary summarydata\" colspan=\"3\">", vals, "</td>\n",
+         collapse = ""),
+  "  </tr>\n")
+
+fit_rows <- paste0(
+  make_row("AIC", sprintf("%.3f", sapply(mods_F2, AIC))),
+  make_row("BIC", sprintf("%.3f", sapply(mods_F2, BIC)))
+)
+
+mon_tableau$page.complete <- sub("</table>", paste0(fit_rows, "</table>"),
+                                 mon_tableau$page.complete, fixed = TRUE)
+
+writeLines(mon_tableau$page.complete,
+           here("Figures", "tableau_modeles_CDS_F2_rev2.doc"))
+
+library(parameters)
+model_parameters(M4_F2, exponentiate = TRUE, component = "all", digits = 3)
 
 ### ==========================================================
 ### Forest plot (2 panels) - hurdle model (glmmTMB) - Factor 2 CDS
@@ -2903,6 +3268,151 @@ ggsave(here("Figures", "forest_plot_hurdle_CDS_F2_invOR.pdf"), combined_plot, wi
 ggsave(here("Figures", "forest_plot_hurdle_CDS_F2_invOR.png"), combined_plot, width = 6, height = 7.5, units = "in", dpi = 300)
 
 
+### ==========================================================
+### Forest plot (2 panels) - hurdle model (glmmTMB) - CDS total
+### Panel A: Presence of symptoms P(Y > 0)   (inverted zi) -> OR
+### Panel B: Intensity           Y | Y > 0  (count)        -> IRR
+### + significance stars (* p<.05, ** p<.01, *** p<.001)
+### ==========================================================
+
+library(glmmTMB)
+library(broom.mixed)
+library(dplyr)
+library(ggplot2)
+library(patchwork)
+library(here)
+
+# --------------------------------------------------------------
+# 0. Helper: p-value -> stars
+# --------------------------------------------------------------
+p_to_stars <- function(p) {
+  case_when(
+    is.na(p)  ~ "",
+    p < 0.001 ~ "***",
+    p < 0.01  ~ "**",
+    p < 0.05  ~ "*",
+    TRUE      ~ ""
+  )
+}
+
+# --------------------------------------------------------------
+# 1. Extract fixed effects
+# --------------------------------------------------------------
+tidy_intensity <- broom.mixed::tidy(
+  M4_F2, effects = "fixed", component = "cond",
+  conf.int = TRUE, exponentiate = TRUE
+) %>%
+  filter(term != "(Intercept)")
+
+tidy_absence <- broom.mixed::tidy(
+  M4_F2, effects = "fixed", component = "zi",
+  conf.int = TRUE, exponentiate = TRUE
+) %>%
+  filter(term != "(Intercept)")
+
+# Panel A: P(Y > 0), multiplicative inversion (1 / OR); p-values unchanged
+tidy_presence <- tidy_absence %>%
+  mutate(
+    conf_low_raw  = conf.low,
+    conf_high_raw = conf.high,
+    estimate  = 1 / estimate,
+    conf.low  = 1 / conf_high_raw,
+    conf.high = 1 / conf_low_raw
+  )
+
+# --------------------------------------------------------------
+# 2. Relabel predictors + compute stars
+# --------------------------------------------------------------
+label_map <- c(
+  "AGE_centered"       = "Age (centered)",
+  "SEXEf"              = "Sex (female vs. male)",
+  "ANXIETE_recoded"    = "Anxiety (HADS-A)",
+  "DEPRESSION_recoded" = "Depression (HADS-D)"
+)
+
+prepare_data <- function(df) {
+  df %>%
+    mutate(
+      label_text = ifelse(term %in% names(label_map), label_map[term], term),
+      stars      = p_to_stars(p.value)
+    ) %>%
+    mutate(label = factor(label_text, levels = rev(unique(label_text))))
+}
+
+tidy_intensity <- prepare_data(tidy_intensity)
+tidy_presence  <- prepare_data(tidy_presence)
+
+# --------------------------------------------------------------
+# 3. Forest plot function
+# --------------------------------------------------------------
+make_forest <- function(data, title, xlab, x_breaks = c(0, 1, 2), x_max = 2.5) {
+  
+  n_labels <- nlevels(data$label)
+  bg_rects <- data.frame(y = seq_len(n_labels)) %>%
+    filter(y %% 2 == 1)
+  
+  ggplot(data, aes(x = estimate, y = label)) +
+    geom_rect(
+      data = bg_rects,
+      aes(ymin = y - 0.5, ymax = y + 0.5, xmin = -Inf, xmax = Inf),
+      fill = "grey94",
+      inherit.aes = FALSE
+    ) +
+    geom_vline(xintercept = 1, linetype = "dashed", color = "grey45", linewidth = 0.5) +
+    geom_errorbar(
+      aes(xmin = conf.low, xmax = conf.high),
+      width = 0.15, color = "black", linewidth = 0.6
+    ) +
+    geom_point(size = 3, shape = 19, color = "black") +
+    # Stars: fixed column at the right edge of the plotting area
+    geom_text(
+      aes(x = x_max - 0.05, label = stars),
+      hjust = 1, vjust = 0.75, size = 5, color = "black", family="Arial"
+    ) +
+    scale_x_continuous(breaks = x_breaks, expand = c(0, 0)) +
+    coord_cartesian(xlim = c(0, x_max)) +
+    labs(title = title, x = xlab, y = NULL) +
+    theme_classic(base_size = 12) +
+    theme(
+      plot.title         = element_text(face = "bold", size = 10, hjust = 0, family="Arial"),
+      axis.text.y        = element_text(color = "black", size = 10, family="Arial"),
+      axis.text.x        = element_text(color = "black", size = 9, family="Arial"),
+      axis.title.x       = element_text(size = 10, family="Arial"),
+      axis.line          = element_line(linewidth = 0.3),
+      axis.ticks         = element_line(linewidth = 0.3),
+      panel.grid.major.y = element_blank(),
+      panel.grid.minor   = element_blank()
+    )
+}
+
+# --------------------------------------------------------------
+# 4. Build the panels
+# --------------------------------------------------------------
+p_presence <- make_forest(
+  tidy_presence,
+  title = "A. Occurrence component: Presence of symptoms [P(Y > 0)]",
+  xlab  = "Odds Ratio (95% CI)"
+)
+
+p_intensity <- make_forest(
+  tidy_intensity,
+  title = "B. Intensity component: Symptom severity [Y | Y > 0]",
+  xlab  = "Incidence Rate Ratio (95% CI)"
+)
+
+# --------------------------------------------------------------
+# 5. Stack panels, add caption, export
+# --------------------------------------------------------------
+combined_plot <- p_presence / p_intensity +
+  plot_layout(heights = c(1, 1))
+
+print(combined_plot)
+
+ggsave(here("Figures", "forest_plot_hurdle_CDS_F2_pres.pdf"), combined_plot, height = 6, width = 6, units = "in")
+ggsave(here("Figures", "forest_plot_hurdle_CDS_F2_pres.png"), combined_plot, height = 6, width = 6, units = "in", dpi = 300)
+
+
+
 #####################################################################
 # Figure combinée : forest plots invOR, CDS total + Facteur 1 + Facteur 2
 # Colonnes = scores ; lignes = Absence P(Y=0) / Présence P(Y>0) / Intensité
@@ -2921,47 +3431,46 @@ label_map <- c(
 )
 
 comp_labels <- c(
-  "A" = "A. Absence of symptoms\nP(Y = 0) - OR",
-  "B" = "B. Presence of symptoms\nP(Y > 0) - OR",
-  "C" = "C. Symptom severity\nY | Y > 0 - IRR"
+  "A" = "A. Presence of symptoms\nP(Y > 0) - OR",
+  "B" = "B. Symptom severity\nY | Y > 0 - IRR"
 )
 
 # Extrait les 3 composantes d'un modèle hurdle dans un seul tableau
 extract_hurdle <- function(model, score_name) {
   
+  # B : intensité (partie conditionnelle, IRR)
   intensity <- broom.mixed::tidy(model, effects = "fixed", component = "cond",
                                  conf.int = TRUE, exponentiate = TRUE) %>%
-    mutate(component = "C")
+    mutate(component = "B")
   
-  absence <- broom.mixed::tidy(model, effects = "fixed", component = "zi",
-                               conf.int = TRUE, exponentiate = TRUE) %>%
-    mutate(component = "A")
-  
-  # Inversion multiplicative : P(Y > 0) ; p-values inchangées
-  presence <- absence %>%
-    mutate(component = "B",
-           lo = 1 / conf.high,
-           hi = 1 / conf.low,
+  # A : présence P(Y > 0) = inverse de la partie zero-inflation
+  presence <- broom.mixed::tidy(model, effects = "fixed", component = "zi",
+                                conf.int = TRUE, exponentiate = TRUE) %>%
+    mutate(component = "A",
+           lo       = 1 / conf.high,
+           hi       = 1 / conf.low,
            estimate = 1 / estimate,
            conf.low = lo,
            conf.high = hi) %>%
     dplyr::select(-lo, -hi)
   
-  bind_rows(absence, presence, intensity) %>%
+  bind_rows(presence, intensity) %>%
     filter(term != "(Intercept)") %>%
     mutate(score = score_name)
 }
 
 all_res <- bind_rows(
   extract_hurdle(M4,    "CDS total score"),
-  extract_hurdle(M4_F1, "CDS Factor 1"),
-  extract_hurdle(M4_F2, "CDS Factor 2")
+  extract_hurdle(M4_F1, "Self Uncertainty and Detachment"),
+  extract_hurdle(M4_F2, "Emotional and Sensory Numbing")
 ) %>%
   mutate(
     stars     = p_to_stars(p.value),
     label     = factor(label_map[term], levels = rev(unname(label_map))),
     component = factor(component, levels = names(comp_labels), labels = comp_labels),
-    score     = factor(score, levels = c("CDS total score", "CDS Factor 1", "CDS Factor 2"))
+    score     = factor(score, levels = c("CDS total score", 
+                                         "Self Uncertainty and Detachment", 
+                                         "Emotional and Sensory Numbing"))
   )
 
 x_max <- 2.5   # à augmenter si des IC dépassent (ils seraient tronqués)
@@ -2978,32 +3487,32 @@ forest_all <- ggplot(all_res, aes(x = estimate, y = label)) +
     inherit.aes = FALSE
   ) +
   geom_vline(xintercept = 1, linetype = "dashed", color = "grey45", linewidth = 0.5) +
-  geom_errorbarh(aes(xmin = conf.low, xmax = conf.high),
-                 height = 0.15, color = "black", linewidth = 0.6) +
-  geom_point(size = 2.5, color = "black") +
+  geom_errorbar(aes(xmin = conf.low, xmax = conf.high),
+                 width = 0.2, color = "black", linewidth = 0.6) +
+  geom_point(size = 2, color = "black") +
   geom_text(aes(x = x_max - 0.05, label = stars),
-            hjust = 1, vjust = 0.75, size = 5, color = "black") +
+            hjust = 1, vjust = 0.75, size = 5, color = "black", family="Arial") +
   facet_grid(component ~ score) +
   scale_x_continuous(breaks = c(0, 1, 2), expand = c(0, 0)) +
   coord_cartesian(xlim = c(0, x_max)) +
   labs(x = "Odds Ratio / Incidence Rate Ratio (95% CI)", y = NULL) +
   theme_classic(base_size = 11) +
   theme(
-    strip.text.x       = element_text(face = "bold", size = 11),
-    strip.text.y       = element_text(face = "bold", size = 9, angle = 270),
+    strip.text.x       = element_text(face = "bold", size = 11, family="Arial"),
+    strip.text.y       = element_text(face = "bold", size = 9, angle = 270, family="Arial"),
     strip.background   = element_rect(fill = "grey92", color = "grey60", linewidth = 0.3),
-    axis.text          = element_text(color = "black", size = 9),
+    axis.text          = element_text(color = "black", size = 9, family="Arial"),
     panel.spacing      = unit(0.8, "lines"),
     panel.border       = element_rect(color = "grey60", fill = NA, linewidth = 0.3),
-    plot.caption       = element_text(size = 8, hjust = 0)
+    plot.caption       = element_text(size = 8, hjust = 0, family="Arial")
   )
 
 forest_all
 
-ggsave(here("Figures", "forest_plot_hurdle_CDS_all_invOR.pdf"), forest_all, width = 10, height = 7.5, units = "in")
-ggsave(here("Figures", "forest_plot_hurdle_CDS_all_invOR.png"), forest_all, width = 10, height = 7.5, units = "in", dpi = 300)
-
-
+ggsave(here("Figures", "forest_plot_hurdle_CDS_all_pres.pdf"), forest_all,
+       width = 10, height = 5, units = "in", device = cairo_pdf)
+ggsave(here("Figures", "forest_plot_hurdle_CDS_all_pres.png"), forest_all,
+       width = 10, height = 5, units = "in", dpi = 300)
 
 ################################################################################################################
 # SEM CDS factors WITH MEASUREMENT MODEL
@@ -3086,7 +3595,7 @@ doc <- body_add_flextable(doc, value = ft)
 print(doc, target = here("Figures", "CDS_pop_gen_SEM_loadings_std.docx"))
 
 # Export of fit measures table
-fit_indices <- fitMeasures(fit_CDS_fac_boot, c("chisq", "df", "pvalue", 
+fit_indices <- fitMeasures(fit_CDS_fac, c("chisq", "df", "pvalue", 
                                           "cfi.robust", "gfi.robust", "tli.robust", 
                                           "rmsea.robust", "rmsea.ci.lower.robust", "rmsea.ci.upper.robust", 
                                           "srmr", "aic", "bic"))
@@ -3111,7 +3620,7 @@ ft <- autofit(ft)
 # Export to Word
 doc <- read_docx()
 doc <- body_add_flextable(doc, ft)
-print(doc, target = here("Figures", "CDS_pop_gen_SEM_Fit_Indices_boot.docx"))
+print(doc, target = here("Figures", "CDS_pop_gen_SEM_Fit_Indices.docx"))
 
 #################################################################################################################
 # Simple Mediation  Model CDS total score

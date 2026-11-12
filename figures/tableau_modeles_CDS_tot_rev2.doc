@@ -80,7 +80,7 @@ td {  }
     <td class="tdata centeralign modelcolumn1 col4"><strong>0.001</strong></td>
     <td class="tdata centeralign modelcolumn2 col5">0.99</td>
     <td class="tdata centeralign modelcolumn2 col6">0.99&nbsp;&ndash;&nbsp;1.00</td>
-    <td class="tdata centeralign modelcolumn2 col7"><strong>0.004</strong></td>
+    <td class="tdata centeralign modelcolumn2 col7"><strong>0.003</strong></td>
     <td class="tdata centeralign modelcolumn3 col8">0.99</td>
     <td class="tdata centeralign modelcolumn3 col9">0.99&nbsp;&ndash;&nbsp;1.00</td>
     <td class="tdata centeralign modelcolumn3 col10"><strong>0.001</strong></td>
@@ -99,21 +99,21 @@ td {  }
     <td class="tdata centeralign modelcolumn1 col2"></td>
     <td class="tdata centeralign modelcolumn1 col3"></td>
     <td class="tdata centeralign modelcolumn1 col4"></td>
-    <td class="tdata centeralign modelcolumn2 col5">1.39</td>
-    <td class="tdata centeralign modelcolumn2 col6">1.16&nbsp;&ndash;&nbsp;1.67</td>
+    <td class="tdata centeralign modelcolumn2 col5">1.38</td>
+    <td class="tdata centeralign modelcolumn2 col6">1.16&nbsp;&ndash;&nbsp;1.66</td>
     <td class="tdata centeralign modelcolumn2 col7"><strong>&lt;0.001</strong></td>
     <td class="tdata centeralign modelcolumn3 col8">1.15</td>
-    <td class="tdata centeralign modelcolumn3 col9">0.97&nbsp;&ndash;&nbsp;1.37</td>
-    <td class="tdata centeralign modelcolumn3 col10">0.109</td>
+    <td class="tdata centeralign modelcolumn3 col9">0.97&nbsp;&ndash;&nbsp;1.36</td>
+    <td class="tdata centeralign modelcolumn3 col10">0.120</td>
     <td class="tdata centeralign modelcolumn4 col11">1.28</td>
-    <td class="tdata centeralign modelcolumn4 col12">1.08&nbsp;&ndash;&nbsp;1.52</td>
+    <td class="tdata centeralign modelcolumn4 col12">1.08&nbsp;&ndash;&nbsp;1.51</td>
     <td class="tdata centeralign modelcolumn4 col13"><strong>0.004</strong></td>
-    <td class="tdata centeralign modelcolumn5 col14">1.15</td>
-    <td class="tdata centeralign modelcolumn5 col15">0.97&nbsp;&ndash;&nbsp;1.36</td>
-    <td class="tdata centeralign modelcolumn5 col16">0.102</td>
+    <td class="tdata centeralign modelcolumn5 col14">1.14</td>
+    <td class="tdata centeralign modelcolumn5 col15">0.97&nbsp;&ndash;&nbsp;1.35</td>
+    <td class="tdata centeralign modelcolumn5 col16">0.113</td>
     <td class="tdata centeralign modelcolumn6 col17">1.15</td>
-    <td class="tdata centeralign modelcolumn6 col18">0.97&nbsp;&ndash;&nbsp;1.36</td>
-    <td class="tdata centeralign modelcolumn6 col19">0.098</td>
+    <td class="tdata centeralign modelcolumn6 col18">0.97&nbsp;&ndash;&nbsp;1.35</td>
+    <td class="tdata centeralign modelcolumn6 col19">0.109</td>
 </tr>
   <tr>
     <td class="tdata firsttablecol col1">Anxiety (HADS-A)</td>
@@ -124,13 +124,13 @@ td {  }
     <td class="tdata centeralign modelcolumn2 col6"></td>
     <td class="tdata centeralign modelcolumn2 col7"></td>
     <td class="tdata centeralign modelcolumn3 col8">1.11</td>
-    <td class="tdata centeralign modelcolumn3 col9">1.08&nbsp;&ndash;&nbsp;1.14</td>
+    <td class="tdata centeralign modelcolumn3 col9">1.08&nbsp;&ndash;&nbsp;1.13</td>
     <td class="tdata centeralign modelcolumn3 col10"><strong>&lt;0.001</strong></td>
     <td class="tdata centeralign modelcolumn4 col11"></td>
     <td class="tdata centeralign modelcolumn4 col12"></td>
     <td class="tdata centeralign modelcolumn4 col13"></td>
     <td class="tdata centeralign modelcolumn5 col14">1.08</td>
-    <td class="tdata centeralign modelcolumn5 col15">1.05&nbsp;&ndash;&nbsp;1.11</td>
+    <td class="tdata centeralign modelcolumn5 col15">1.05&nbsp;&ndash;&nbsp;1.10</td>
     <td class="tdata centeralign modelcolumn5 col16"><strong>&lt;0.001</strong></td>
     <td class="tdata centeralign modelcolumn6 col17">1.08</td>
     <td class="tdata centeralign modelcolumn6 col18">1.05&nbsp;&ndash;&nbsp;1.11</td>
@@ -158,6 +158,27 @@ td {  }
     <td class="tdata centeralign modelcolumn6 col19"><strong>&lt;0.001</strong></td>
 </tr>
   <tr>
+    <td class="tdata firsttablecol col1">MIGRAINE</td>
+    <td class="tdata centeralign modelcolumn1 col2"></td>
+    <td class="tdata centeralign modelcolumn1 col3"></td>
+    <td class="tdata centeralign modelcolumn1 col4"></td>
+    <td class="tdata centeralign modelcolumn2 col5"></td>
+    <td class="tdata centeralign modelcolumn2 col6"></td>
+    <td class="tdata centeralign modelcolumn2 col7"></td>
+    <td class="tdata centeralign modelcolumn3 col8"></td>
+    <td class="tdata centeralign modelcolumn3 col9"></td>
+    <td class="tdata centeralign modelcolumn3 col10"></td>
+    <td class="tdata centeralign modelcolumn4 col11"></td>
+    <td class="tdata centeralign modelcolumn4 col12"></td>
+    <td class="tdata centeralign modelcolumn4 col13"></td>
+    <td class="tdata centeralign modelcolumn5 col14"></td>
+    <td class="tdata centeralign modelcolumn5 col15"></td>
+    <td class="tdata centeralign modelcolumn5 col16"></td>
+    <td class="tdata centeralign modelcolumn6 col17">0.98</td>
+    <td class="tdata centeralign modelcolumn6 col18">0.28&nbsp;&ndash;&nbsp;3.39</td>
+    <td class="tdata centeralign modelcolumn6 col19">0.973</td>
+</tr>
+  <tr>
     <td class="tdata firsttablecol col1">Migraine (Yes)</td>
     <td class="tdata centeralign modelcolumn1 col2"></td>
     <td class="tdata centeralign modelcolumn1 col3"></td>
@@ -176,7 +197,7 @@ td {  }
     <td class="tdata centeralign modelcolumn5 col16"></td>
     <td class="tdata centeralign modelcolumn6 col17">0.92</td>
     <td class="tdata centeralign modelcolumn6 col18">0.75&nbsp;&ndash;&nbsp;1.14</td>
-    <td class="tdata centeralign modelcolumn6 col19">0.462</td>
+    <td class="tdata centeralign modelcolumn6 col19">0.465</td>
 </tr>
   <tr>
     <td colspan="19" class="zeroparts">Zero-Inflated Model</td>
@@ -187,19 +208,19 @@ td {  }
     <td class="tdata centeralign modelcolumn1 col3">1.02&nbsp;&ndash;&nbsp;1.05</td>
     <td class="tdata centeralign modelcolumn1 col4"><strong>&lt;0.001</strong></td>
     <td class="tdata centeralign modelcolumn2 col5">1.03</td>
-    <td class="tdata centeralign modelcolumn2 col6">1.01&nbsp;&ndash;&nbsp;1.05</td>
+    <td class="tdata centeralign modelcolumn2 col6">1.02&nbsp;&ndash;&nbsp;1.05</td>
     <td class="tdata centeralign modelcolumn2 col7"><strong>&lt;0.001</strong></td>
     <td class="tdata centeralign modelcolumn3 col8">1.03</td>
-    <td class="tdata centeralign modelcolumn3 col9">1.01&nbsp;&ndash;&nbsp;1.05</td>
+    <td class="tdata centeralign modelcolumn3 col9">1.02&nbsp;&ndash;&nbsp;1.05</td>
     <td class="tdata centeralign modelcolumn3 col10"><strong>&lt;0.001</strong></td>
     <td class="tdata centeralign modelcolumn4 col11">1.03</td>
-    <td class="tdata centeralign modelcolumn4 col12">1.01&nbsp;&ndash;&nbsp;1.05</td>
+    <td class="tdata centeralign modelcolumn4 col12">1.02&nbsp;&ndash;&nbsp;1.05</td>
     <td class="tdata centeralign modelcolumn4 col13"><strong>&lt;0.001</strong></td>
     <td class="tdata centeralign modelcolumn5 col14">1.03</td>
-    <td class="tdata centeralign modelcolumn5 col15">1.01&nbsp;&ndash;&nbsp;1.05</td>
+    <td class="tdata centeralign modelcolumn5 col15">1.02&nbsp;&ndash;&nbsp;1.05</td>
     <td class="tdata centeralign modelcolumn5 col16"><strong>&lt;0.001</strong></td>
     <td class="tdata centeralign modelcolumn6 col17">1.03</td>
-    <td class="tdata centeralign modelcolumn6 col18">1.01&nbsp;&ndash;&nbsp;1.05</td>
+    <td class="tdata centeralign modelcolumn6 col18">1.02&nbsp;&ndash;&nbsp;1.05</td>
     <td class="tdata centeralign modelcolumn6 col19"><strong>&lt;0.001</strong></td>
 </tr>
   <tr>
@@ -207,21 +228,21 @@ td {  }
     <td class="tdata centeralign modelcolumn1 col2"></td>
     <td class="tdata centeralign modelcolumn1 col3"></td>
     <td class="tdata centeralign modelcolumn1 col4"></td>
-    <td class="tdata centeralign modelcolumn2 col5">0.64</td>
-    <td class="tdata centeralign modelcolumn2 col6">0.39&nbsp;&ndash;&nbsp;1.06</td>
-    <td class="tdata centeralign modelcolumn2 col7">0.082</td>
-    <td class="tdata centeralign modelcolumn3 col8">0.88</td>
-    <td class="tdata centeralign modelcolumn3 col9">0.52&nbsp;&ndash;&nbsp;1.47</td>
-    <td class="tdata centeralign modelcolumn3 col10">0.618</td>
-    <td class="tdata centeralign modelcolumn4 col11">0.72</td>
-    <td class="tdata centeralign modelcolumn4 col12">0.43&nbsp;&ndash;&nbsp;1.22</td>
-    <td class="tdata centeralign modelcolumn4 col13">0.220</td>
-    <td class="tdata centeralign modelcolumn5 col14">0.80</td>
-    <td class="tdata centeralign modelcolumn5 col15">0.47&nbsp;&ndash;&nbsp;1.37</td>
-    <td class="tdata centeralign modelcolumn5 col16">0.417</td>
-    <td class="tdata centeralign modelcolumn6 col17">0.80</td>
-    <td class="tdata centeralign modelcolumn6 col18">0.47&nbsp;&ndash;&nbsp;1.37</td>
-    <td class="tdata centeralign modelcolumn6 col19">0.425</td>
+    <td class="tdata centeralign modelcolumn2 col5">0.63</td>
+    <td class="tdata centeralign modelcolumn2 col6">0.38&nbsp;&ndash;&nbsp;1.03</td>
+    <td class="tdata centeralign modelcolumn2 col7">0.067</td>
+    <td class="tdata centeralign modelcolumn3 col8">0.85</td>
+    <td class="tdata centeralign modelcolumn3 col9">0.51&nbsp;&ndash;&nbsp;1.42</td>
+    <td class="tdata centeralign modelcolumn3 col10">0.532</td>
+    <td class="tdata centeralign modelcolumn4 col11">0.69</td>
+    <td class="tdata centeralign modelcolumn4 col12">0.41&nbsp;&ndash;&nbsp;1.16</td>
+    <td class="tdata centeralign modelcolumn4 col13">0.166</td>
+    <td class="tdata centeralign modelcolumn5 col14">0.77</td>
+    <td class="tdata centeralign modelcolumn5 col15">0.45&nbsp;&ndash;&nbsp;1.31</td>
+    <td class="tdata centeralign modelcolumn5 col16">0.335</td>
+    <td class="tdata centeralign modelcolumn6 col17">0.78</td>
+    <td class="tdata centeralign modelcolumn6 col18">0.46&nbsp;&ndash;&nbsp;1.32</td>
+    <td class="tdata centeralign modelcolumn6 col19">0.348</td>
 </tr>
   <tr>
     <td class="tdata firsttablecol col1">Anxiety (HADS-A)</td>
@@ -231,18 +252,18 @@ td {  }
     <td class="tdata centeralign modelcolumn2 col5"></td>
     <td class="tdata centeralign modelcolumn2 col6"></td>
     <td class="tdata centeralign modelcolumn2 col7"></td>
-    <td class="tdata centeralign modelcolumn3 col8">0.81</td>
-    <td class="tdata centeralign modelcolumn3 col9">0.74&nbsp;&ndash;&nbsp;0.89</td>
+    <td class="tdata centeralign modelcolumn3 col8">0.82</td>
+    <td class="tdata centeralign modelcolumn3 col9">0.75&nbsp;&ndash;&nbsp;0.89</td>
     <td class="tdata centeralign modelcolumn3 col10"><strong>&lt;0.001</strong></td>
     <td class="tdata centeralign modelcolumn4 col11"></td>
     <td class="tdata centeralign modelcolumn4 col12"></td>
     <td class="tdata centeralign modelcolumn4 col13"></td>
     <td class="tdata centeralign modelcolumn5 col14">0.91</td>
     <td class="tdata centeralign modelcolumn5 col15">0.83&nbsp;&ndash;&nbsp;1.01</td>
-    <td class="tdata centeralign modelcolumn5 col16">0.068</td>
+    <td class="tdata centeralign modelcolumn5 col16">0.072</td>
     <td class="tdata centeralign modelcolumn6 col17">0.92</td>
     <td class="tdata centeralign modelcolumn6 col18">0.83&nbsp;&ndash;&nbsp;1.01</td>
-    <td class="tdata centeralign modelcolumn6 col19">0.084</td>
+    <td class="tdata centeralign modelcolumn6 col19">0.081</td>
 </tr>
   <tr>
     <td class="tdata firsttablecol col1">Depression (HADS-D)</td>
@@ -255,15 +276,36 @@ td {  }
     <td class="tdata centeralign modelcolumn3 col8"></td>
     <td class="tdata centeralign modelcolumn3 col9"></td>
     <td class="tdata centeralign modelcolumn3 col10"></td>
-    <td class="tdata centeralign modelcolumn4 col11">0.66</td>
-    <td class="tdata centeralign modelcolumn4 col12">0.57&nbsp;&ndash;&nbsp;0.77</td>
+    <td class="tdata centeralign modelcolumn4 col11">0.68</td>
+    <td class="tdata centeralign modelcolumn4 col12">0.59&nbsp;&ndash;&nbsp;0.78</td>
     <td class="tdata centeralign modelcolumn4 col13"><strong>&lt;0.001</strong></td>
-    <td class="tdata centeralign modelcolumn5 col14">0.71</td>
-    <td class="tdata centeralign modelcolumn5 col15">0.61&nbsp;&ndash;&nbsp;0.83</td>
+    <td class="tdata centeralign modelcolumn5 col14">0.72</td>
+    <td class="tdata centeralign modelcolumn5 col15">0.62&nbsp;&ndash;&nbsp;0.84</td>
     <td class="tdata centeralign modelcolumn5 col16"><strong>&lt;0.001</strong></td>
-    <td class="tdata centeralign modelcolumn6 col17">0.71</td>
-    <td class="tdata centeralign modelcolumn6 col18">0.60&nbsp;&ndash;&nbsp;0.83</td>
+    <td class="tdata centeralign modelcolumn6 col17">0.72</td>
+    <td class="tdata centeralign modelcolumn6 col18">0.62&nbsp;&ndash;&nbsp;0.84</td>
     <td class="tdata centeralign modelcolumn6 col19"><strong>&lt;0.001</strong></td>
+</tr>
+  <tr>
+    <td class="tdata firsttablecol col1">MIGRAINE</td>
+    <td class="tdata centeralign modelcolumn1 col2"></td>
+    <td class="tdata centeralign modelcolumn1 col3"></td>
+    <td class="tdata centeralign modelcolumn1 col4"></td>
+    <td class="tdata centeralign modelcolumn2 col5"></td>
+    <td class="tdata centeralign modelcolumn2 col6"></td>
+    <td class="tdata centeralign modelcolumn2 col7"></td>
+    <td class="tdata centeralign modelcolumn3 col8"></td>
+    <td class="tdata centeralign modelcolumn3 col9"></td>
+    <td class="tdata centeralign modelcolumn3 col10"></td>
+    <td class="tdata centeralign modelcolumn4 col11"></td>
+    <td class="tdata centeralign modelcolumn4 col12"></td>
+    <td class="tdata centeralign modelcolumn4 col13"></td>
+    <td class="tdata centeralign modelcolumn5 col14"></td>
+    <td class="tdata centeralign modelcolumn5 col15"></td>
+    <td class="tdata centeralign modelcolumn5 col16"></td>
+    <td class="tdata centeralign modelcolumn6 col17">1.97</td>
+    <td class="tdata centeralign modelcolumn6 col18">0.16&nbsp;&ndash;&nbsp;23.90</td>
+    <td class="tdata centeralign modelcolumn6 col19">0.593</td>
 </tr>
   <tr>
     <td class="tdata firsttablecol col1">Migraine (Yes)</td>
@@ -282,37 +324,37 @@ td {  }
     <td class="tdata centeralign modelcolumn5 col14"></td>
     <td class="tdata centeralign modelcolumn5 col15"></td>
     <td class="tdata centeralign modelcolumn5 col16"></td>
-    <td class="tdata centeralign modelcolumn6 col17">0.62</td>
-    <td class="tdata centeralign modelcolumn6 col18">0.28&nbsp;&ndash;&nbsp;1.41</td>
-    <td class="tdata centeralign modelcolumn6 col19">0.256</td>
+    <td class="tdata centeralign modelcolumn6 col17">0.63</td>
+    <td class="tdata centeralign modelcolumn6 col18">0.28&nbsp;&ndash;&nbsp;1.42</td>
+    <td class="tdata centeralign modelcolumn6 col19">0.261</td>
 </tr>
   <tr>
     <td class="tdata leftalign summary firstsumrow">Observations</td>
-    <td class="tdata summary summarydata firstsumrow" colspan="3">539</td>
-    <td class="tdata summary summarydata firstsumrow" colspan="3">539</td>
-    <td class="tdata summary summarydata firstsumrow" colspan="3">539</td>
-    <td class="tdata summary summarydata firstsumrow" colspan="3">539</td>
-    <td class="tdata summary summarydata firstsumrow" colspan="3">539</td>
-    <td class="tdata summary summarydata firstsumrow" colspan="3">539</td>
+    <td class="tdata summary summarydata firstsumrow" colspan="3">542</td>
+    <td class="tdata summary summarydata firstsumrow" colspan="3">542</td>
+    <td class="tdata summary summarydata firstsumrow" colspan="3">542</td>
+    <td class="tdata summary summarydata firstsumrow" colspan="3">542</td>
+    <td class="tdata summary summarydata firstsumrow" colspan="3">542</td>
+    <td class="tdata summary summarydata firstsumrow" colspan="3">542</td>
   </tr>
 
   <tr>
     <td class="tdata leftalign summary">AIC</td>
-    <td class="tdata summary summarydata" colspan="3">3940.722</td>
-    <td class="tdata summary summarydata" colspan="3">3929.339</td>
-    <td class="tdata summary summarydata" colspan="3">3848.795</td>
-    <td class="tdata summary summarydata" colspan="3">3829.600</td>
-    <td class="tdata summary summarydata" colspan="3">3798.827</td>
-    <td class="tdata summary summarydata" colspan="3">3800.900</td>
+    <td class="tdata summary summarydata" colspan="3">3957.353</td>
+    <td class="tdata summary summarydata" colspan="3">3945.775</td>
+    <td class="tdata summary summarydata" colspan="3">3866.623</td>
+    <td class="tdata summary summarydata" colspan="3">3847.564</td>
+    <td class="tdata summary summarydata" colspan="3">3817.222</td>
+    <td class="tdata summary summarydata" colspan="3">3823.014</td>
   </tr>
   <tr>
     <td class="tdata leftalign summary">BIC</td>
-    <td class="tdata summary summarydata" colspan="3">3962.171</td>
-    <td class="tdata summary summarydata" colspan="3">3959.367</td>
-    <td class="tdata summary summarydata" colspan="3">3887.403</td>
-    <td class="tdata summary summarydata" colspan="3">3868.207</td>
-    <td class="tdata summary summarydata" colspan="3">3846.014</td>
-    <td class="tdata summary summarydata" colspan="3">3856.666</td>
+    <td class="tdata summary summarydata" colspan="3">3978.829</td>
+    <td class="tdata summary summarydata" colspan="3">3975.842</td>
+    <td class="tdata summary summarydata" colspan="3">3905.280</td>
+    <td class="tdata summary summarydata" colspan="3">3886.221</td>
+    <td class="tdata summary summarydata" colspan="3">3864.470</td>
+    <td class="tdata summary summarydata" colspan="3">3887.443</td>
   </tr>
 </table>
 
