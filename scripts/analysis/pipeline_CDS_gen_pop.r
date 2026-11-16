@@ -92,10 +92,17 @@ for (col in anxdep) {
   cat (col, ": Aberrant values (>21):", av, "\n")
 }
 
+
+describe(df$CDS_total_sum)
+quantile(df$CDS_total_sum)
 ####################################################################################################
 # Items descriptives for figures
 ####################################################################################################
 library(openxlsx)
+
+items <- df %>% 
+  dplyr::select(all_of(CDS_items)) %>% 
+  filter(complete.cases(.))
 
 # Fonction pour calculer les statistiques d'un item
 calculer_stats <- function(x) {
@@ -527,6 +534,8 @@ n_sujets     <- nrow(items)
 
 compare_table <- data.frame()
 
+rmsr <- function(m) { r <- m$residual; sqrt(mean(r[lower.tri(r)]^2)) }
+
 # Loop to have fit indices for all models
 for (type in c("Spearman", "Pearson")) {
   matrix <- if(type == "Spearman") mat_spearman else mat_pearson
@@ -540,7 +549,7 @@ for (type in c("Spearman", "Pearson")) {
       Chi_deux = round(modele$STATISTIC, 2),
       p_value  = round(modele$PVAL, 4),
       TLI         = round(modele$TLI, 3),
-      RMSR        = round(modele$rms, 3),
+      RMSR = round(rmsr(modele), 3),
       RMSEA       = round(modele$RMSEA[1], 3),     
       RMSEA_inf   = round(modele$RMSEA[2], 3),     
       RMSEA_sup   = round(modele$RMSEA[3], 3),     
@@ -675,7 +684,7 @@ fit_tab <- do.call(rbind, lapply(c("Spearman", "Pearson"), function(type) {
     data.frame(Correlation = type, Factors = k,
                chi2 = m$STATISTIC, dof = m$dof, p = m$PVAL,
                TLI = m$TLI, RMSEA = m$RMSEA[1], lo = m$RMSEA[2], hi = m$RMSEA[3],
-               RMSR = m$rms, BIC = m$BIC)
+               RMSR = rmsr(m), BIC = m$BIC)
   }))
 }))
 
@@ -835,9 +844,9 @@ df2$DEPRESSION_recoded <- as.numeric(as.character(df2$DEPRESSION_recoded))
 
 
 ######### Mann-Whitney tests for CDS, Anx and Dep according to sex ############
-describeBy(df$CDS_total_sum, group = df$SEXE)
-describeBy(df$ANXIETE_recoded, group = df$SEXE)
-describeBy(df$DEPRESSION_recoded, group = df$SEXE)
+describeBy(df2$CDS_total_sum, group = df2$SEXE)
+describeBy(df2$ANXIETE_recoded, group = df2$SEXE)
+describeBy(df2$DEPRESSION_recoded, group = df2$SEXE)
 
 library(rstatix)
 
@@ -846,9 +855,9 @@ variables_a_tester <- c("CDS_total_sum", "ANXIETE_recoded", "DEPRESSION_recoded"
 
 mw_results <- lapply(variables_a_tester, function(var) {
   # Test de Mann-Whitney (Wilcoxon rank-sum test)
-  test_res <- df %>% wilcox_test(as.formula(paste(var, "~ SEXE")), detailed = TRUE)
+  test_res <- df2 %>% wilcox_test(as.formula(paste(var, "~ SEXE")), detailed = TRUE)
   # Taille d'effet (r de Rosenthal)
-  eff_res  <- df %>% wilcox_effsize(as.formula(paste(var, "~ SEXE")))
+  eff_res  <- df2 %>% wilcox_effsize(as.formula(paste(var, "~ SEXE")))
   
   # Fusion des résultats
   data.frame(
@@ -1093,7 +1102,7 @@ CDS_forms <- c("CDS_total_sum", "CDS_tot_log", "CDS_tot_sqrt")
 
 distrib_CDS <- lapply(CDS_forms, function(x) {
   
-  # Ajout de na.rm=TRUE au cas où vous auriez des données manquantes
+  # Ajout de na.rm=TRUE au cas où données manquantes
   col_mean = mean(df2[[x]], na.rm = TRUE)
   col_median = median(df2[[x]], na.rm = TRUE)
   
