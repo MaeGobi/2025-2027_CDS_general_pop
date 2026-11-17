@@ -786,28 +786,28 @@ ft3 <- flextable(t3) %>%
 #####################################################################
 # Table 4 : Reliability (total CDS and factors)
 #####################################################################
-rel_row <- function(x, label) {
-  a  <- psych::alpha(x, check.keys = FALSE, warnings = FALSE)
-  r <- psych::reliability(items=x, nfactors=1)
-  sh <- psych::splitHalf(x)
-  data.frame(Scale = label, Items = ncol(x),
-             alpha = paste0(fmt_d(a$total$raw_alpha, 2), " [", fmt_d(a$feldt$lower.ci, 2), "-",
-                               fmt_d(a$feldt$upper.ci, 2), "]"),
-             omega = fmt_d(r$result.df[1, "omega.tot"]),
-             mean_r = fmt_d(a$total$average_r, 2),
-             split = fmt_d(sh$meanr, 2))
-}
-
 t4 <- bind_rows(rel_row(CDS,      "CDS total"),
                 rel_row(CDS_Fac1, "Factor 1"),
                 rel_row(CDS_Fac2, "Factor 2"))
 
-ft4 <- flextable(t4) %>%
-  set_header_labels(Scale = "Scale", Items = "Number of items",
-                    alpha = "Cronbach's α [95% CI]",
-                    omega = "Total ω",
-                    mean_r = "Mean inter-item r",
-                    split = "Mean split-half") %>%
+# Libellés des indicateurs (ordre = colonnes de t4 hors "Scale")
+labels <- c(Items     = "Number of items",
+            alpha     = "Cronbach's α [95% CI]",
+            omega     = "Total ω",
+            mean_r    = "Mean inter-item correlation",
+            meansplit = "Mean split-half",
+            minsplit  = "Minimum split-half (β)",
+            maxsplit  = "Maximum split-half (λ4)")
+
+# Transposition : indicateurs en lignes, échelles en colonnes
+t4_t <- t4 %>%
+  mutate(across(everything(), as.character)) %>%   # types homogènes avant de pivoter
+  tidyr::pivot_longer(-Scale, names_to = "Indicator", values_to = "value") %>%
+  tidyr::pivot_wider(names_from = Scale, values_from = value) %>%
+  mutate(Indicator = labels[Indicator])
+
+ft4 <- flextable(t4_t) %>%
+  set_header_labels(Indicator = "") %>%
   apa_style() %>%
   finish()
 
@@ -3671,7 +3671,222 @@ doc <- body_add_flextable(doc, value = ft)
 print(doc, target = here("Figures", "CDS_pop_gen_Mediation_loadings_std_boot.docx"))
 
 
+################################################################################
+# EXPORT DES TABLEAUX (format e-Table 18 / 19 / 20) : SEM + MEDIATION
+#
+# A lancer APRES le script principal : on a besoin de
+#   - fit_CDS_fac_boot  (SEM avec modèle de mesure, bootstrap)
+#   - fit_med           (médiation simple sur CDS_total, bootstrap)
+################################################################################
+library(lavaan)
+library(dplyr)
+library(flextable)
+library(officer)
+library(here)
 
+#### 0. A ADAPTER ---------------------------------------------------------------
+# Noms affichés dans les tableaux (noms = noms des variables dans la syntaxe lavaan)
+lab_outcome <- c(Fac1       = "Self Uncertainty and Detachment",          # <- renommer selon vos facteurs
+                 Fac2       = "Emotional and Sensory Numbing",
+                 Depression = "Depression",
+                 Anxiety    = "Anxiety",
+                 CDS_total  = "CDS total score")
+
+lab_pred <- c(Depression   = "Depression",
+              Anxiety      = "Anxiety",
+              AGE_centered = "Age",
+              SEX          = "Sex")
+
+sex_ref <- "Male"          # catégorie de référence de SEX (à vérifier)
+
+# Type de standardisation. Attention : pour fit_med (aucune variable latente),
+# "std.lv" = estimations NON standardisées. Pour des effets standardisés avec un
+# prédicteur binaire (SEX), "std.nox" est généralement plus adapté.
+std_sem <- "std.lv"
+std_med <- "std.lv"
+
+#### 1. FONCTIONS UTILITAIRES ---------------------------------------------------
+fmt3 <- function(x) {
+  x <- round(x, 3) + 0                                  # évite "-0.000"
+  ifelse(is.na(x), "", formatC(x, digits = 3, format = "f"))
+}
+
+fmt_p <- function(p) {
+  dplyr::case_when(is.na(p)  ~ "",
+                   p < .001  ~ "< 0.001",
+                   p < .01   ~ "< 0.01",
+                   p < .05   ~ "< 0.05",
+                   TRUE      ~ fmt3(p))
+}
+
+# n'affiche une valeur que sur la première ligne de chaque bloc
+blank_repeats <- function(x) ifelse(x == dplyr::lag(x, default = ""), "", x)
+
+get_std <- function(fit, type) {
+  standardizedSolution(fit, type = type, ci = TRUE, level = 0.95)
+}
+
+style_table <- function(ft) {
+  # Si vous préférez votre style habituel : ft %>% apa_style() %>% finish()
+  ft %>%
+    font(fontname = "Times New Roman", part = "all") %>%
+    fontsize(size = 9, part = "all") %>%
+    border_remove() %>%
+    hline_top(border = fp_border(width = 1), part = "header") %>%
+    hline_bottom(border = fp_border(width = 1), part = "header") %>%
+    hline_bottom(border = fp_border(width = 1), part = "body")
+}
+
+# d : data.frame avec les colonnes d'étiquettes (label_cols) + les colonnes
+#     numériques de standardizedSolution (est.std, se, z, pvalue, ci.lower, ci.upper)
+# grp : vecteur identifiant les blocs (pour tracer un filet fin entre blocs)
+make_ft <- function(d, label_cols, label_headers, type, bold_cols = 1, grp = NULL) {
+  
+  disp <- d %>%
+    dplyr::mutate(est = fmt3(est.std),
+                  se  = fmt3(se),
+                  z   = fmt3(z),
+                  p   = fmt_p(pvalue),
+                  ci  = paste0(fmt3(ci.lower), ", ", fmt3(ci.upper))) %>%
+    dplyr::select(all_of(label_cols), est, se, z, p, ci)
+  
+  sig <- which(!is.na(d$pvalue) & d$pvalue < .05)
+  
+  ft <- flextable(disp) %>%
+    set_header_labels(values = as.list(c(
+      setNames(label_headers, label_cols),
+      est = paste0("Std. Estimate (", type, ")"),
+      se = "SE", z = "z", p = "p-value", ci = "95% CI"))) %>%
+    compose(part = "header", j = "z", value = as_paragraph(as_i("z"))) %>%
+    compose(part = "header", j = "p", value = as_paragraph(as_i("p"), "-value")) %>%
+    style_table() %>%
+    align(j = seq_along(label_cols), align = "left",   part = "all") %>%
+    align(j = c("est", "se", "z", "p", "ci"), align = "center", part = "all") %>%
+    bold(part = "header") %>%
+    bold(j = bold_cols, part = "body")
+  
+  if (length(sig)) ft <- bold(ft, i = sig, j = "p", part = "body")   # p < .05 en gras
+  
+  if (!is.null(grp)) {
+    brk <- which(grp[-1] != grp[-length(grp)])
+    if (length(brk))
+      ft <- hline(ft, i = brk, border = fp_border(color = "grey70", width = 0.5), part = "body")
+  }
+  autofit(ft)
+}
+
+save_docx <- function(ft, title, note, file) {
+  txt <- function(...) fp_text(font.size = 10, font.family = "Times New Roman", ...)
+  doc <- read_docx() %>%
+    body_add_fpar(fpar(ftext(title, txt(bold = TRUE)))) %>%
+    body_add_par("") %>%
+    body_add_flextable(ft) %>%
+    body_add_fpar(fpar(ftext(note, fp_text(font.size = 9, font.family = "Times New Roman"))))
+  print(doc, target = file)
+  message("Exporté : ", file)
+}
+
+note_std <- function(type, ...) {
+  paste0("Std. Estimate (", type, ") = ",
+         if (type == "std.lv") "standardized coefficient estimate for latent variables"
+         else paste0("standardized estimate (", type, ")"),
+         "; SE = standard error; CI = confidence interval. ", ...)
+}
+
+#### 2. TABLE A : régressions (équivalent e-Table 18) ---------------------------
+build_reg_ft <- function(fit, outcomes, type, preds = lab_pred) {
+  d <- get_std(fit, type) %>%
+    dplyr::filter(op == "~", lhs %in% names(outcomes), rhs %in% names(preds))
+  d <- d[order(match(d$lhs, names(outcomes)), match(d$rhs, names(preds))), ]
+  
+  grp <- d$lhs
+  d$Outcome   <- blank_repeats(unname(outcomes[d$lhs]))
+  d$Predictor <- unname(preds[d$rhs])
+  
+  make_ft(d, c("Outcome", "Predictor"), c("Outcome", "Predictor/Covariate"),
+          type = type, bold_cols = 1, grp = grp)
+}
+
+#### 3. TABLE B : effets indirects et totaux (équivalent e-Table 19) ------------
+# Table de correspondance : nom du paramètre défini (:=) -> médiateur / outcome
+map_sem <- data.frame(
+  param    = c("indAD", "indAA", "totA", "indBD", "indBA", "totB"),
+  Mediator = c("Depression", "Anxiety", "", "Depression", "Anxiety", ""),
+  Outcome  = c("Fac1", "Fac1", "Fac1", "Fac2", "Fac2", "Fac2"),
+  Effect   = c("Indirect", "Indirect", "Total", "Indirect", "Indirect", "Total"))
+
+map_med <- data.frame(
+  param    = c("abD", "abA", "total"),
+  Mediator = c("Depression", "Anxiety", ""),
+  Outcome  = "CDS_total",
+  Effect   = c("Indirect", "Indirect", "Total"))
+
+build_eff_ft <- function(fit, map, predictor_label, type) {
+  d <- get_std(fit, type) %>%
+    dplyr::filter(op == ":=") %>%
+    inner_join(map, by = c("lhs" = "param"))
+  d <- d[order(match(d$lhs, map$param)), ]
+  
+  grp      <- d$Outcome
+  is_first <- !duplicated(d$Outcome)
+  d$Predictor <- ifelse(is_first, predictor_label, "")
+  d$Outcome   <- ifelse(is_first, unname(lab_outcome[d$Outcome]), "")
+  
+  make_ft(d, c("Predictor", "Mediator", "Outcome", "Effect"),
+          c("Predictor", "Mediator", "Outcome", "Effect type"),
+          type = type, bold_cols = 1:3, grp = grp)
+}
+
+#### 4. TABLE C : saturations du modèle de mesure (équivalent e-Table 20) -------
+build_load_ft <- function(fit, factors, type) {
+  d <- get_std(fit, type) %>%
+    dplyr::filter(op == "=~", lhs %in% names(factors))
+  d <- d[order(match(d$lhs, names(factors))), ]        # garde l'ordre des items
+  
+  grp <- d$lhs
+  d$Factor <- blank_repeats(unname(factors[d$lhs]))
+  d$Item   <- sub("^CDS", "Q", d$rhs)                   # CDS7 -> Q7
+  
+  make_ft(d, c("Factor", "Item"), c("Factor", "Item"),
+          type = type, bold_cols = 1, grp = grp)
+}
+
+#### 5. EXPORTS -----------------------------------------------------------------
+dir.create(here("Figures"), showWarnings = FALSE)
+
+# --- SEM avec modèle de mesure ---
+save_docx(
+  build_reg_ft(fit_CDS_fac_boot, lab_outcome[c("Fac1", "Fac2", "Depression", "Anxiety")], std_sem),
+  title = "Supplementary Table 6. Structural equation model: effect of depression and anxiety on the CDS factors, as well as the effect of the covariates (age and sex) on the CDS factors, depression and anxiety.",
+  note  = note_std(std_sem, "Reference for Sex = ", sex_ref, "."),
+  file  = here("Figures", "CDS_pop_gen_SEM_table_regressions.docx"))
+
+save_docx(
+  build_eff_ft(fit_CDS_fac_boot, map_sem, lab_pred[["SEX"]], std_sem),
+  title = "Supplementary Table 7. Structural equation model: indirect and total effects of sex on the CDS factors mediated by depression and anxiety.",
+  note  = note_std(std_sem, "Reference for Sex = ", sex_ref, "."),
+  file  = here("Figures", "CDS_pop_gen_SEM_table_indirect_total.docx"))
+
+save_docx(
+  build_load_ft(fit_CDS_fac_boot, lab_outcome[c("Fac1", "Fac2")], std_sem),
+  title = "Supplementary Table 8. Structural equation model: measurement model showing item loadings for the CDS factors.",
+  note  = note_std(std_sem),
+  file  = here("Figures", "CDS_pop_gen_SEM_table_loadings.docx"))
+
+
+
+# --- Médiation simple sur CDS_total ---
+save_docx(
+  build_reg_ft(fit_med, lab_outcome[c("CDS_total", "Depression", "Anxiety")], std_med),
+  title = "e-Table X. Mediation model: effect of depression and anxiety on the CDS total score, as well as the effect of the covariates (age and sex) on the CDS total score, depression and anxiety.",
+  note  = note_std(std_med, "Reference for Sex = ", sex_ref, "."),
+  file  = here("Figures", "CDS_pop_gen_Mediation_table_regressions.docx"))
+
+save_docx(
+  build_eff_ft(fit_med, map_med, lab_pred[["SEX"]], std_med),
+  title = "e-Table X. Mediation model: indirect and total effects of sex on the CDS total score mediated by depression and anxiety.",
+  note  = note_std(std_med, "Reference for Sex = ", sex_ref, "."),
+  file  = here("Figures", "CDS_pop_gen_Mediation_table_indirect_total.docx"))
 
 ### ==========================================================
 ### CDS item-level figure
