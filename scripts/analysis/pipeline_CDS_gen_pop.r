@@ -1219,6 +1219,801 @@ ggsave(
   dpi = 300
 )
 
+
+#############################################################################################################
+# Factor 1 according to age and sex
+#############################################################################################################
+library(dplyr)
+library(ggplot2)
+library(MASS)
+library(marginaleffects)
+library(patchwork)
+library(here)
+
+# ------------------------------------------------------------
+# 0. Préparation des données
+# ------------------------------------------------------------
+
+df_plot <- df %>%
+  filter(
+    !is.na(AGE),
+    !is.na(CDS_total_sum),
+    !is.na(SEXE)
+  ) %>%
+  mutate(
+    SEXE = factor(
+      SEXE,
+      levels = c("h", "f"),
+      labels = c("Male", "Female")
+    )
+  )
+
+# Centrage de l'âge sur la moyenne de l'échantillon total
+age_mean <- mean(df_plot$AGE)
+
+df_plot <- df_plot %>%
+  mutate(AGE_c = AGE - age_mean)
+
+# Vérifier les effectifs
+table(df_plot$SEXE)
+
+
+# ------------------------------------------------------------
+# 1. Relation globale : linéaire vs quadratique
+# ------------------------------------------------------------
+
+m_global_lin <- glm.nb(
+  CDS_F1 ~ AGE_c,
+  data = df_plot
+)
+
+m_global_quad <- glm.nb(
+  CDS_F1 ~ AGE_c + I(AGE_c^2),
+  data = df_plot
+)
+
+# Test du gain d'ajustement apporté par le terme quadratique
+test_global_quad <- anova(m_global_lin, m_global_quad)
+
+print(test_global_quad)
+
+# Choix de la forme du modèle global
+p_global_quad <- test_global_quad$`Pr(Chi)`[2]
+
+m_global <- if (p_global_quad < 0.05) {
+  m_global_quad
+} else {
+  m_global_lin
+}
+
+cat(
+  "\nForme retenue pour le modèle global :",
+  ifelse(p_global_quad < 0.05, "quadratique", "linéaire"),
+  "\n"
+)
+
+
+# ------------------------------------------------------------
+# 2. Relation linéaire vs quadratique séparément par sexe
+# ------------------------------------------------------------
+
+fits_sexe <- list()
+comparaisons_sexe <- list()
+
+for (s in levels(df_plot$SEXE)) {
+  
+  d <- filter(df_plot, SEXE == s)
+  
+  m_lin <- glm.nb(
+    CDS_F1 ~ AGE_c,
+    data = d
+  )
+  
+  m_quad <- glm.nb(
+    CDS_F1 ~ AGE_c + I(AGE_c^2),
+    data = d
+  )
+  
+  test_quad <- anova(m_lin, m_quad)
+  
+  p_quad <- test_quad$`Pr(Chi)`[2]
+  
+  m_retenu <- if (p_quad < 0.05) m_quad else m_lin
+  
+  fits_sexe[[s]] <- list(
+    linear = m_lin,
+    quadratic = m_quad,
+    selected = m_retenu,
+    p_quadratic = p_quad
+  )
+  
+  comparaisons_sexe[[s]] <- data.frame(
+    Sex = s,
+    AIC_linear = AIC(m_lin),
+    AIC_quadratic = AIC(m_quad),
+    BIC_linear = BIC(m_lin),
+    BIC_quadratic = BIC(m_quad),
+    p_quadratic = p_quad,
+    Model_selected = ifelse(p_quad < 0.05, "Quadratic", "Linear")
+  )
+}
+
+tab_forme_sexe <- bind_rows(comparaisons_sexe)
+
+print(tab_forme_sexe, digits = 4)
+
+
+# ------------------------------------------------------------
+# 3. Les relations diffèrent-elles selon le sexe ?
+# ------------------------------------------------------------
+
+# Modèles linéaires : avec et sans interaction âge × sexe
+m_lin_add <- glm.nb(
+  CDS_F1 ~ AGE_c + SEXE,
+  data = df_plot
+)
+
+m_lin_int <- glm.nb(
+  CDS_F1 ~ AGE_c * SEXE,
+  data = df_plot
+)
+
+test_interaction_lin <- anova(m_lin_add, m_lin_int)
+
+# Modèles quadratiques : avec et sans interaction âge × sexe
+m_quad_add <- glm.nb(
+  CDS_F1 ~ AGE_c + I(AGE_c^2) + SEXE,
+  data = df_plot
+)
+
+m_quad_int <- glm.nb(
+  CDS_F1 ~ (AGE_c + I(AGE_c^2)) * SEXE,
+  data = df_plot
+)
+
+test_interaction_quad <- anova(m_quad_add, m_quad_int)
+
+# Test de l'intérêt du terme quadratique dans le modèle avec interaction
+test_quad_interact <- anova(m_lin_int, m_quad_int)
+
+print(test_interaction_lin)
+print(test_interaction_quad)
+print(test_quad_interact)
+
+# Choix d'une forme commune pour comparer les relations entre sexes
+p_quad_interact <- test_quad_interact$`Pr(Chi)`[2]
+
+if (p_quad_interact < 0.05) {
+  
+  m_interaction <- m_quad_int
+  m_additif <- m_quad_add
+  test_interaction <- test_interaction_quad
+  forme_interaction <- "Quadratique"
+  
+} else {
+  
+  m_interaction <- m_lin_int
+  m_additif <- m_lin_add
+  test_interaction <- test_interaction_lin
+  forme_interaction <- "Linéaire"
+}
+
+cat(
+  "\nForme retenue pour la comparaison entre sexes :",
+  forme_interaction,
+  "\n"
+)
+
+# Test formel de différence entre les sexes
+print(test_interaction)
+
+
+summary(m_lin_int)
+
+# ------------------------------------------------------------
+# 4. Pentes selon le sexe à un âge de référence commun
+# ------------------------------------------------------------
+
+# Créer explicitement les données pour les deux sexes
+newdata_slopes <- expand.grid(
+  AGE_c = 0,
+  SEXE = levels(df_plot$SEXE)
+)
+
+# S'assurer que SEXE conserve les mêmes niveaux que dans le modèle
+newdata_slopes$SEXE <- factor(
+  newdata_slopes$SEXE,
+  levels = levels(df_plot$SEXE)
+)
+
+# Estimation des pentes sur l'échelle du lien (log)
+slopes_sexe <- slopes(
+  m_interaction,
+  variables = "AGE_c",
+  newdata = newdata_slopes,
+  type = "link"
+)
+
+slopes_sexe
+
+# ------------------------------------------------------------
+# 5. Fonction pour obtenir les prédictions et IC à 95 %
+# ------------------------------------------------------------
+
+pred_nb <- function(model, newdata) {
+  
+  pred <- predict(
+    model,
+    newdata = newdata,
+    type = "link",
+    se.fit = TRUE
+  )
+  
+  newdata %>%
+    mutate(
+      predicted = exp(pred$fit),
+      lower = exp(pred$fit - 1.96 * pred$se.fit),
+      upper = exp(pred$fit + 1.96 * pred$se.fit)
+    )
+}
+
+
+# ------------------------------------------------------------
+# 6. Graphique A : relation globale
+# ------------------------------------------------------------
+
+grid_global <- data.frame(
+  AGE_c = seq(
+    min(df_plot$AGE_c),
+    max(df_plot$AGE_c),
+    length.out = 200
+  )
+) %>%
+  mutate(AGE = AGE_c + age_mean)
+
+pred_global <- pred_nb(m_global, grid_global)
+
+p1 <- ggplot(
+  df_plot,
+  aes(x = AGE, y = CDS_F1)
+) +
+  geom_point(
+    alpha = 0.30,
+    color = "grey35",
+    size = 1.4
+  ) +
+  geom_ribbon(
+    data = pred_global,
+    aes(x = AGE, ymin = lower, ymax = upper),
+    inherit.aes = FALSE,
+    fill = "steelblue",
+    alpha = 0.18
+  ) +
+  geom_line(
+    data = pred_global,
+    aes(x = AGE, y = predicted),
+    inherit.aes = FALSE,
+    color = "steelblue",
+    linewidth = 1
+  ) +
+  labs(
+    x = "Age (years)",
+    y = "CDS total score",
+    title = "A. CDS total score according to age"
+  ) +
+  coord_cartesian(ylim = c(0, 100)) +
+  theme_classic(
+    base_size = 12,
+    base_family = "Arial"
+  )
+
+
+# ------------------------------------------------------------
+# 7. Graphique B : relations par sexe
+# ------------------------------------------------------------
+
+pred_sexe <- bind_rows(
+  lapply(levels(df_plot$SEXE), function(s) {
+    
+    d <- filter(df_plot, SEXE == s)
+    
+    grid <- data.frame(
+      AGE_c = seq(
+        min(d$AGE_c),
+        max(d$AGE_c),
+        length.out = 200
+      )
+    ) %>%
+      mutate(
+        AGE = AGE_c + age_mean,
+        SEXE = s
+      )
+    
+    pred_nb(
+      fits_sexe[[s]]$selected,
+      grid
+    )
+  })
+)
+
+p2 <- ggplot(
+  df_plot,
+  aes(
+    x = AGE,
+    y = CDS_F1,
+    color = SEXE,
+    fill = SEXE
+  )
+) +
+  geom_point(
+    alpha = 0.25,
+    size = 1.4
+  ) +
+  geom_ribbon(
+    data = pred_sexe,
+    aes(
+      x = AGE,
+      ymin = lower,
+      ymax = upper,
+      fill = SEXE
+    ),
+    inherit.aes = FALSE,
+    alpha = 0.15
+  ) +
+  geom_line(
+    data = pred_sexe,
+    aes(
+      x = AGE,
+      y = predicted,
+      color = SEXE
+    ),
+    inherit.aes = FALSE,
+    linewidth = 1
+  ) +
+  scale_color_manual(
+    values = c(
+      "Male" = "steelblue",
+      "Female" = "firebrick"
+    )
+  ) +
+  scale_fill_manual(
+    values = c(
+      "Male" = "steelblue",
+      "Female" = "firebrick"
+    )
+  ) +
+  labs(
+    x = "Age (years)",
+    y = "Self Unreality and Detachment",
+    title = "B. Self Unreality and Detachment according to age and sex",
+    color = NULL,
+    fill = NULL
+  ) +
+  coord_cartesian(ylim = c(0, 100)) +
+  theme_classic(
+    base_size = 12,
+    base_family = "Arial"
+  ) +
+  theme(
+    legend.position = "top"
+  )
+
+
+# ------------------------------------------------------------
+# 8. Assemblage et export des graphiques
+# ------------------------------------------------------------
+
+fig_CDS <- p1 / p2
+
+print(fig_CDS)
+
+ggsave(
+  here("Figures", "F1_age_sex.png"),
+  fig_CDS,
+  width = 6,
+  height = 8,
+  dpi = 300
+)
+
+
+
+#############################################################################################################
+# Factor 2 according to age and sex
+#############################################################################################################
+library(dplyr)
+library(ggplot2)
+library(MASS)
+library(marginaleffects)
+library(patchwork)
+library(here)
+
+# ------------------------------------------------------------
+# 0. Préparation des données
+# ------------------------------------------------------------
+
+df_plot <- df %>%
+  filter(
+    !is.na(AGE),
+    !is.na(CDS_total_sum),
+    !is.na(SEXE)
+  ) %>%
+  mutate(
+    SEXE = factor(
+      SEXE,
+      levels = c("h", "f"),
+      labels = c("Male", "Female")
+    )
+  )
+
+# Centrage de l'âge sur la moyenne de l'échantillon total
+age_mean <- mean(df_plot$AGE)
+
+df_plot <- df_plot %>%
+  mutate(AGE_c = AGE - age_mean)
+
+# Vérifier les effectifs
+table(df_plot$SEXE)
+
+
+# ------------------------------------------------------------
+# 1. Relation globale : linéaire vs quadratique
+# ------------------------------------------------------------
+
+m_global_lin <- glm.nb(
+  CDS_F1 ~ AGE_c,
+  data = df_plot
+)
+
+m_global_quad <- glm.nb(
+  CDS_F1 ~ AGE_c + I(AGE_c^2),
+  data = df_plot
+)
+
+# Test du gain d'ajustement apporté par le terme quadratique
+test_global_quad <- anova(m_global_lin, m_global_quad)
+
+print(test_global_quad)
+
+# Choix de la forme du modèle global
+p_global_quad <- test_global_quad$`Pr(Chi)`[2]
+
+m_global <- if (p_global_quad < 0.05) {
+  m_global_quad
+} else {
+  m_global_lin
+}
+
+cat(
+  "\nForme retenue pour le modèle global :",
+  ifelse(p_global_quad < 0.05, "quadratique", "linéaire"),
+  "\n"
+)
+
+
+# ------------------------------------------------------------
+# 2. Relation linéaire vs quadratique séparément par sexe
+# ------------------------------------------------------------
+
+fits_sexe <- list()
+comparaisons_sexe <- list()
+
+for (s in levels(df_plot$SEXE)) {
+  
+  d <- filter(df_plot, SEXE == s)
+  
+  m_lin <- glm.nb(
+    CDS_F1 ~ AGE_c,
+    data = d
+  )
+  
+  m_quad <- glm.nb(
+    CDS_F1 ~ AGE_c + I(AGE_c^2),
+    data = d
+  )
+  
+  test_quad <- anova(m_lin, m_quad)
+  
+  p_quad <- test_quad$`Pr(Chi)`[2]
+  
+  m_retenu <- if (p_quad < 0.05) m_quad else m_lin
+  
+  fits_sexe[[s]] <- list(
+    linear = m_lin,
+    quadratic = m_quad,
+    selected = m_retenu,
+    p_quadratic = p_quad
+  )
+  
+  comparaisons_sexe[[s]] <- data.frame(
+    Sex = s,
+    AIC_linear = AIC(m_lin),
+    AIC_quadratic = AIC(m_quad),
+    BIC_linear = BIC(m_lin),
+    BIC_quadratic = BIC(m_quad),
+    p_quadratic = p_quad,
+    Model_selected = ifelse(p_quad < 0.05, "Quadratic", "Linear")
+  )
+}
+
+tab_forme_sexe <- bind_rows(comparaisons_sexe)
+
+print(tab_forme_sexe, digits = 4)
+
+
+# ------------------------------------------------------------
+# 3. Les relations diffèrent-elles selon le sexe ?
+# ------------------------------------------------------------
+
+# Modèles linéaires : avec et sans interaction âge × sexe
+m_lin_add <- glm.nb(
+  CDS_F1 ~ AGE_c + SEXE,
+  data = df_plot
+)
+
+m_lin_int <- glm.nb(
+  CDS_F1 ~ AGE_c * SEXE,
+  data = df_plot
+)
+
+test_interaction_lin <- anova(m_lin_add, m_lin_int)
+
+# Modèles quadratiques : avec et sans interaction âge × sexe
+m_quad_add <- glm.nb(
+  CDS_F1 ~ AGE_c + I(AGE_c^2) + SEXE,
+  data = df_plot
+)
+
+m_quad_int <- glm.nb(
+  CDS_F1 ~ (AGE_c + I(AGE_c^2)) * SEXE,
+  data = df_plot
+)
+
+test_interaction_quad <- anova(m_quad_add, m_quad_int)
+
+# Test de l'intérêt du terme quadratique dans le modèle avec interaction
+test_quad_interact <- anova(m_lin_int, m_quad_int)
+
+print(test_interaction_lin)
+print(test_interaction_quad)
+print(test_quad_interact)
+
+# Choix d'une forme commune pour comparer les relations entre sexes
+p_quad_interact <- test_quad_interact$`Pr(Chi)`[2]
+
+if (p_quad_interact < 0.05) {
+  
+  m_interaction <- m_quad_int
+  m_additif <- m_quad_add
+  test_interaction <- test_interaction_quad
+  forme_interaction <- "Quadratique"
+  
+} else {
+  
+  m_interaction <- m_lin_int
+  m_additif <- m_lin_add
+  test_interaction <- test_interaction_lin
+  forme_interaction <- "Linéaire"
+}
+
+cat(
+  "\nForme retenue pour la comparaison entre sexes :",
+  forme_interaction,
+  "\n"
+)
+
+# Test formel de différence entre les sexes
+print(test_interaction)
+
+
+summary(m_lin_int)
+
+# ------------------------------------------------------------
+# 4. Pentes selon le sexe à un âge de référence commun
+# ------------------------------------------------------------
+
+# Créer explicitement les données pour les deux sexes
+newdata_slopes <- expand.grid(
+  AGE_c = 0,
+  SEXE = levels(df_plot$SEXE)
+)
+
+# S'assurer que SEXE conserve les mêmes niveaux que dans le modèle
+newdata_slopes$SEXE <- factor(
+  newdata_slopes$SEXE,
+  levels = levels(df_plot$SEXE)
+)
+
+# Estimation des pentes sur l'échelle du lien (log)
+slopes_sexe <- slopes(
+  m_interaction,
+  variables = "AGE_c",
+  newdata = newdata_slopes,
+  type = "link"
+)
+
+slopes_sexe
+
+# ------------------------------------------------------------
+# 5. Fonction pour obtenir les prédictions et IC à 95 %
+# ------------------------------------------------------------
+
+pred_nb <- function(model, newdata) {
+  
+  pred <- predict(
+    model,
+    newdata = newdata,
+    type = "link",
+    se.fit = TRUE
+  )
+  
+  newdata %>%
+    mutate(
+      predicted = exp(pred$fit),
+      lower = exp(pred$fit - 1.96 * pred$se.fit),
+      upper = exp(pred$fit + 1.96 * pred$se.fit)
+    )
+}
+
+
+# ------------------------------------------------------------
+# 6. Graphique A : relation globale
+# ------------------------------------------------------------
+
+grid_global <- data.frame(
+  AGE_c = seq(
+    min(df_plot$AGE_c),
+    max(df_plot$AGE_c),
+    length.out = 200
+  )
+) %>%
+  mutate(AGE = AGE_c + age_mean)
+
+pred_global <- pred_nb(m_global, grid_global)
+
+p1 <- ggplot(
+  df_plot,
+  aes(x = AGE, y = CDS_F1)
+) +
+  geom_point(
+    alpha = 0.30,
+    color = "grey35",
+    size = 1.4
+  ) +
+  geom_ribbon(
+    data = pred_global,
+    aes(x = AGE, ymin = lower, ymax = upper),
+    inherit.aes = FALSE,
+    fill = "steelblue",
+    alpha = 0.18
+  ) +
+  geom_line(
+    data = pred_global,
+    aes(x = AGE, y = predicted),
+    inherit.aes = FALSE,
+    color = "steelblue",
+    linewidth = 1
+  ) +
+  labs(
+    x = "Age (years)",
+    y = "CDS total score",
+    title = "A. CDS total score according to age"
+  ) +
+  coord_cartesian(ylim = c(0, 100)) +
+  theme_classic(
+    base_size = 12,
+    base_family = "Arial"
+  )
+
+
+# ------------------------------------------------------------
+# 7. Graphique B : relations par sexe
+# ------------------------------------------------------------
+
+pred_sexe <- bind_rows(
+  lapply(levels(df_plot$SEXE), function(s) {
+    
+    d <- filter(df_plot, SEXE == s)
+    
+    grid <- data.frame(
+      AGE_c = seq(
+        min(d$AGE_c),
+        max(d$AGE_c),
+        length.out = 200
+      )
+    ) %>%
+      mutate(
+        AGE = AGE_c + age_mean,
+        SEXE = s
+      )
+    
+    pred_nb(
+      fits_sexe[[s]]$selected,
+      grid
+    )
+  })
+)
+
+p2 <- ggplot(
+  df_plot,
+  aes(
+    x = AGE,
+    y = CDS_F1,
+    color = SEXE,
+    fill = SEXE
+  )
+) +
+  geom_point(
+    alpha = 0.25,
+    size = 1.4
+  ) +
+  geom_ribbon(
+    data = pred_sexe,
+    aes(
+      x = AGE,
+      ymin = lower,
+      ymax = upper,
+      fill = SEXE
+    ),
+    inherit.aes = FALSE,
+    alpha = 0.15
+  ) +
+  geom_line(
+    data = pred_sexe,
+    aes(
+      x = AGE,
+      y = predicted,
+      color = SEXE
+    ),
+    inherit.aes = FALSE,
+    linewidth = 1
+  ) +
+  scale_color_manual(
+    values = c(
+      "Male" = "steelblue",
+      "Female" = "firebrick"
+    )
+  ) +
+  scale_fill_manual(
+    values = c(
+      "Male" = "steelblue",
+      "Female" = "firebrick"
+    )
+  ) +
+  labs(
+    x = "Age (years)",
+    y = "Self Unreality and Detachment",
+    title = "B. Self Unreality and Detachment according to age and sex",
+    color = NULL,
+    fill = NULL
+  ) +
+  coord_cartesian(ylim = c(0, 100)) +
+  theme_classic(
+    base_size = 12,
+    base_family = "Arial"
+  ) +
+  theme(
+    legend.position = "top"
+  )
+
+
+# ------------------------------------------------------------
+# 8. Assemblage et export des graphiques
+# ------------------------------------------------------------
+
+fig_CDS <- p1 / p2
+
+print(fig_CDS)
+
+ggsave(
+  here("Figures", "F1_age_sex.png"),
+  fig_CDS,
+  width = 6,
+  height = 8,
+  dpi = 300
+)
+
+
+
 #############################################################################################################
 # CDS according to anxiety and depression and anxdep according to sex
 #####################################################################
