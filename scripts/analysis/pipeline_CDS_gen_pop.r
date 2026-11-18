@@ -3878,13 +3878,13 @@ save_docx(
 # --- Médiation simple sur CDS_total ---
 save_docx(
   build_reg_ft(fit_med, lab_outcome[c("CDS_total", "Depression", "Anxiety")], std_med),
-  title = "e-Table X. Mediation model: effect of depression and anxiety on the CDS total score, as well as the effect of the covariates (age and sex) on the CDS total score, depression and anxiety.",
+  title = "Supplementary Table 9. Mediation model: effect of depression and anxiety on the CDS total score, as well as the effect of the covariates (age and sex) on the CDS total score, depression and anxiety.",
   note  = note_std(std_med, "Reference for Sex = ", sex_ref, "."),
   file  = here("Figures", "CDS_pop_gen_Mediation_table_regressions.docx"))
 
 save_docx(
   build_eff_ft(fit_med, map_med, lab_pred[["SEX"]], std_med),
-  title = "e-Table X. Mediation model: indirect and total effects of sex on the CDS total score mediated by depression and anxiety.",
+  title = "Supplementary Table 10. Mediation model: indirect and total effects of sex on the CDS total score mediated by depression and anxiety.",
   note  = note_std(std_med, "Reference for Sex = ", sex_ref, "."),
   file  = here("Figures", "CDS_pop_gen_Mediation_table_indirect_total.docx"))
 
