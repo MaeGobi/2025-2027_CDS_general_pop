@@ -1498,8 +1498,8 @@ p1 <- ggplot(
   ) +
   labs(
     x = "Age (years)",
-    y = "CDS total score",
-    title = "A. CDS total score according to age"
+    y = "Self Unreality and Detachment total score",
+    title = "A. Self Unreality and Detachment according to age"
   ) +
   coord_cartesian(ylim = c(0, 100)) +
   theme_classic(
@@ -1660,12 +1660,12 @@ table(df_plot$SEXE)
 # ------------------------------------------------------------
 
 m_global_lin <- glm.nb(
-  CDS_F1 ~ AGE_c,
+  CDS_F2 ~ AGE_c,
   data = df_plot
 )
 
 m_global_quad <- glm.nb(
-  CDS_F1 ~ AGE_c + I(AGE_c^2),
+  CDS_F2 ~ AGE_c + I(AGE_c^2),
   data = df_plot
 )
 
@@ -1702,12 +1702,12 @@ for (s in levels(df_plot$SEXE)) {
   d <- filter(df_plot, SEXE == s)
   
   m_lin <- glm.nb(
-    CDS_F1 ~ AGE_c,
+    CDS_F2 ~ AGE_c,
     data = d
   )
   
   m_quad <- glm.nb(
-    CDS_F1 ~ AGE_c + I(AGE_c^2),
+    CDS_F2 ~ AGE_c + I(AGE_c^2),
     data = d
   )
   
@@ -1746,12 +1746,12 @@ print(tab_forme_sexe, digits = 4)
 
 # Modèles linéaires : avec et sans interaction âge × sexe
 m_lin_add <- glm.nb(
-  CDS_F1 ~ AGE_c + SEXE,
+  CDS_F2 ~ AGE_c + SEXE,
   data = df_plot
 )
 
 m_lin_int <- glm.nb(
-  CDS_F1 ~ AGE_c * SEXE,
+  CDS_F2 ~ AGE_c * SEXE,
   data = df_plot
 )
 
@@ -1759,12 +1759,12 @@ test_interaction_lin <- anova(m_lin_add, m_lin_int)
 
 # Modèles quadratiques : avec et sans interaction âge × sexe
 m_quad_add <- glm.nb(
-  CDS_F1 ~ AGE_c + I(AGE_c^2) + SEXE,
+  CDS_F2 ~ AGE_c + I(AGE_c^2) + SEXE,
   data = df_plot
 )
 
 m_quad_int <- glm.nb(
-  CDS_F1 ~ (AGE_c + I(AGE_c^2)) * SEXE,
+  CDS_F2 ~ (AGE_c + I(AGE_c^2)) * SEXE,
   data = df_plot
 )
 
@@ -1805,7 +1805,7 @@ cat(
 print(test_interaction)
 
 
-summary(m_lin_int)
+summary(m_quad_int)
 
 # ------------------------------------------------------------
 # 4. Pentes selon le sexe à un âge de référence commun
@@ -1872,7 +1872,7 @@ pred_global <- pred_nb(m_global, grid_global)
 
 p1 <- ggplot(
   df_plot,
-  aes(x = AGE, y = CDS_F1)
+  aes(x = AGE, y = CDS_F2)
 ) +
   geom_point(
     alpha = 0.30,
@@ -1895,8 +1895,8 @@ p1 <- ggplot(
   ) +
   labs(
     x = "Age (years)",
-    y = "CDS total score",
-    title = "A. CDS total score according to age"
+    y = "Emotional and Sensory Numbing",
+    title = "A. Emotional and Sensory Numbing total score according to age"
   ) +
   coord_cartesian(ylim = c(0, 100)) +
   theme_classic(
@@ -1981,8 +1981,8 @@ p2 <- ggplot(
   ) +
   labs(
     x = "Age (years)",
-    y = "Self Unreality and Detachment",
-    title = "B. Self Unreality and Detachment according to age and sex",
+    y = "Emotional and Sensory Numbing",
+    title = "B. Emotional and Sensory Numbing according to age and sex",
     color = NULL,
     fill = NULL
   ) +
@@ -2005,7 +2005,7 @@ fig_CDS <- p1 / p2
 print(fig_CDS)
 
 ggsave(
-  here("Figures", "F1_age_sex.png"),
+  here("Figures", "F2_age_sex.png"),
   fig_CDS,
   width = 6,
   height = 8,
@@ -2718,6 +2718,8 @@ anova(M4, M4_zi_int)
 
 # Interaction dans zi, une fois l'interaction cond incluse
 anova(M4_cond_int, M4b)
+
+
 
 #### Model 5 : CDS ~AGE+SEX+ANXIETY+DEPRESSION+MIGRAINE ####
 M5 <- glmmTMB(
@@ -3543,12 +3545,80 @@ testDispersion(M4_F1)
 library(performance)
 check_collinearity(M4_F1)
 
+
 # b) Version cohérente avec vos Résultats (modèle hurdle)
-M4_int_F1 <- glmmTMB(CDS_F1 ~ AGE_centered * SEXE + ANXIETE_recoded + DEPRESSION_recoded,
-                  ziformula = ~ AGE_centered * SEXE + ANXIETE_recoded + DEPRESSION_recoded,
-                  family = truncated_nbinom2, data = df2)
-summary(M4_int_F1)
-anova(M4, M4_int_F1)
+M4b_F1 <- glmmTMB(CDS_F1 ~ AGE_centered * SEXE + ANXIETE_recoded + DEPRESSION_recoded,
+               ziformula = ~ AGE_centered * SEXE + ANXIETE_recoded + DEPRESSION_recoded,
+               family = truncated_nbinom2, data = df2)
+summary(M4b_F1)
+anova(M4, M4b_F1)
+
+# Exponential transformation of coefficients to interpret them as OR
+# For the binary effect (probability to have 0 = no symptom at all)
+exp(fixef(M4b_F1)$zi)
+# For the intensity effect : regression on severity of reported symptoms
+exp(fixef(M4b_F1)$cond)
+
+
+# Assumptions verification
+# Compute simulated residuals for Hurdle model
+residus_M4b_F1 <- simulateResiduals(fittedModel = M4b_F1)
+
+# Assumptions plot (distribution, homoscedasticity, dispersion)
+plot(residus_M4b_F1)
+testDispersion(M4b_F1)
+
+# VIF & tolerance/checks
+library(performance)
+check_collinearity(M4b_F1)
+
+check_model(M4b_F1)
+
+
+# Interaction uniquement dans la composante positive
+M4_cond_int_F1 <- glmmTMB(
+  CDS_F1 ~ AGE_centered * SEXE +
+    ANXIETE_recoded + DEPRESSION_recoded,
+  
+  ziformula = ~ AGE_centered + SEXE +
+    ANXIETE_recoded + DEPRESSION_recoded,
+  
+  family = truncated_nbinom2,
+  data = df2
+)
+
+summary(M4_cond_int_F1)
+
+
+# Comparaison directe des pentes entre les sexes
+pairs(trends_cond)
+
+
+# Interaction uniquement dans la composante zéro
+M4_zi_int_F1 <- glmmTMB(
+  CDS_F1 ~ AGE_centered + SEXE +
+    ANXIETE_recoded + DEPRESSION_recoded,
+  
+  ziformula = ~ AGE_centered * SEXE +
+    ANXIETE_recoded + DEPRESSION_recoded,
+  
+  family = truncated_nbinom2,
+  data = df2
+)
+
+summary(M4_zi_int_F1)
+
+# Comparaisons
+anova(M4_F1, M4_cond_int_F1, M4_zi_int_F1, M4b_F1)
+
+# Interaction dans la composante conditionnelle
+anova(M4_F1, M4_cond_int_F1)
+
+# Interaction dans la composante zéro
+anova(M4_F1, M4_zi_int_F1)
+
+# Interaction dans zi, une fois l'interaction cond incluse
+anova(M4_cond_int_F1, M4b_F1)
 
 
 #### Model 5 : CDS ~AGE+SEX+ANXIETY+DEPRESSION+MIGRAINE ####
@@ -4230,14 +4300,89 @@ library(performance)
 check_collinearity(M4_F2)
 
 
-
-
 # b) Version cohérente avec vos Résultats (modèle hurdle)
-M4_int_F2 <- glmmTMB(CDS_F2 ~ AGE_centered * SEXE + ANXIETE_recoded + DEPRESSION_recoded,
-                     ziformula = ~ AGE_centered * SEXE + ANXIETE_recoded + DEPRESSION_recoded,
-                     family = truncated_nbinom2, data = df2)
-summary(M4_int_F2)
-anova(M4, M4_int_F2)
+M4b_F2 <- glmmTMB(CDS_F2 ~ AGE_centered * SEXE + ANXIETE_recoded + DEPRESSION_recoded,
+                  ziformula = ~ AGE_centered * SEXE + ANXIETE_recoded + DEPRESSION_recoded,
+                  family = truncated_nbinom2, data = df2)
+summary(M4b_F2)
+anova(M4_F2, M4b_F2)
+
+# Exponential transformation of coefficients to interpret them as OR
+# For the binary effect (probability to have 0 = no symptom at all)
+exp(fixef(M4b_F2)$zi)
+# For the intensity effect : regression on severity of reported symptoms
+exp(fixef(M4b_F2)$cond)
+
+
+# Assumptions verification
+# Compute simulated residuals for Hurdle model
+residus_M4b_F2 <- simulateResiduals(fittedModel = M4b_F2)
+
+# Assumptions plot (distribution, homoscedasticity, dispersion)
+plot(residus_M4b_F2)
+testDispersion(M4b_F2)
+
+# VIF & tolerance/checks
+library(performance)
+check_collinearity(M4b_F2)
+
+check_model(M4b_F2)
+
+
+# Interaction uniquement dans la composante positive
+M4_cond_int_F2 <- glmmTMB(
+  CDS_F2 ~ AGE_centered * SEXE +
+    ANXIETE_recoded + DEPRESSION_recoded,
+  
+  ziformula = ~ AGE_centered + SEXE +
+    ANXIETE_recoded + DEPRESSION_recoded,
+  
+  family = truncated_nbinom2,
+  data = df2
+)
+
+summary(M4_cond_int_F2)
+
+library(emmeans)
+
+trends_F2 <- emtrends(
+  M4_cond_int_F2,
+  specs = ~ SEXE,
+  var = "AGE_centered",
+  component = "cond"
+)
+
+summary(trends_F2, infer = c(TRUE, TRUE))
+
+pairs(trends_F2)
+
+
+# Interaction uniquement dans la composante zéro
+M4_zi_int_F2 <- glmmTMB(
+  CDS_F2 ~ AGE_centered + SEXE +
+    ANXIETE_recoded + DEPRESSION_recoded,
+  
+  ziformula = ~ AGE_centered * SEXE +
+    ANXIETE_recoded + DEPRESSION_recoded,
+  
+  family = truncated_nbinom2,
+  data = df2
+)
+
+summary(M4_zi_int_F2)
+
+# Comparaisons
+anova(M4_F2, M4_cond_int_F2, M4_zi_int_F2, M4b_F2)
+
+# Interaction dans la composante conditionnelle
+anova(M4_F2, M4_cond_int_F2)
+
+# Interaction dans la composante zéro
+anova(M4_F2, M4_zi_int_F2)
+
+# Interaction dans zi, une fois l'interaction cond incluse
+anova(M4_cond_int_F2, M4b_F2)
+
 
 
 
