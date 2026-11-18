@@ -823,30 +823,418 @@ save_as_docx(
 )
 
 
-###################################################################################################################
-# Linear Regression Models #
-###################################################################################################################
+
+#############################################################################################################
+# CDS according to age and sex
+#############################################################################################################
+library(dplyr)
+library(ggplot2)
+library(MASS)
+library(marginaleffects)
+library(patchwork)
+library(here)
+
+# ------------------------------------------------------------
+# 0. Préparation des données
+# ------------------------------------------------------------
+
+df_plot <- df %>%
+  filter(
+    !is.na(AGE),
+    !is.na(CDS_total_sum),
+    !is.na(SEXE)
+  ) %>%
+  mutate(
+    SEXE = factor(
+      SEXE,
+      levels = c("h", "f"),
+      labels = c("Male", "Female")
+    )
+  )
+
+# Centrage de l'âge sur la moyenne de l'échantillon total
+age_mean <- mean(df_plot$AGE)
+
+df_plot <- df_plot %>%
+  mutate(AGE_c = AGE - age_mean)
+
+# Vérifier les effectifs
+table(df_plot$SEXE)
+
+
+# ------------------------------------------------------------
+# 1. Relation globale : linéaire vs quadratique
+# ------------------------------------------------------------
+
+m_global_lin <- glm.nb(
+  CDS_total_sum ~ AGE_c,
+  data = df_plot
+)
+
+m_global_quad <- glm.nb(
+  CDS_total_sum ~ AGE_c + I(AGE_c^2),
+  data = df_plot
+)
+
+# Test du gain d'ajustement apporté par le terme quadratique
+test_global_quad <- anova(m_global_lin, m_global_quad)
+
+print(test_global_quad)
+
+# Choix de la forme du modèle global
+p_global_quad <- test_global_quad$`Pr(Chi)`[2]
+
+m_global <- if (p_global_quad < 0.05) {
+  m_global_quad
+} else {
+  m_global_lin
+}
+
+cat(
+  "\nForme retenue pour le modèle global :",
+  ifelse(p_global_quad < 0.05, "quadratique", "linéaire"),
+  "\n"
+)
+
+
+# ------------------------------------------------------------
+# 2. Relation linéaire vs quadratique séparément par sexe
+# ------------------------------------------------------------
+
+fits_sexe <- list()
+comparaisons_sexe <- list()
+
+for (s in levels(df_plot$SEXE)) {
+  
+  d <- filter(df_plot, SEXE == s)
+  
+  m_lin <- glm.nb(
+    CDS_total_sum ~ AGE_c,
+    data = d
+  )
+  
+  m_quad <- glm.nb(
+    CDS_total_sum ~ AGE_c + I(AGE_c^2),
+    data = d
+  )
+  
+  test_quad <- anova(m_lin, m_quad)
+  
+  p_quad <- test_quad$`Pr(Chi)`[2]
+  
+  m_retenu <- if (p_quad < 0.05) m_quad else m_lin
+  
+  fits_sexe[[s]] <- list(
+    linear = m_lin,
+    quadratic = m_quad,
+    selected = m_retenu,
+    p_quadratic = p_quad
+  )
+  
+  comparaisons_sexe[[s]] <- data.frame(
+    Sex = s,
+    AIC_linear = AIC(m_lin),
+    AIC_quadratic = AIC(m_quad),
+    BIC_linear = BIC(m_lin),
+    BIC_quadratic = BIC(m_quad),
+    p_quadratic = p_quad,
+    Model_selected = ifelse(p_quad < 0.05, "Quadratic", "Linear")
+  )
+}
+
+tab_forme_sexe <- bind_rows(comparaisons_sexe)
+
+print(tab_forme_sexe, digits = 4)
+
+
+# ------------------------------------------------------------
+# 3. Les relations diffèrent-elles selon le sexe ?
+# ------------------------------------------------------------
+
+# Modèles linéaires : avec et sans interaction âge × sexe
+m_lin_add <- glm.nb(
+  CDS_total_sum ~ AGE_c + SEXE,
+  data = df_plot
+)
+
+m_lin_int <- glm.nb(
+  CDS_total_sum ~ AGE_c * SEXE,
+  data = df_plot
+)
+
+test_interaction_lin <- anova(m_lin_add, m_lin_int)
+
+# Modèles quadratiques : avec et sans interaction âge × sexe
+m_quad_add <- glm.nb(
+  CDS_total_sum ~ AGE_c + I(AGE_c^2) + SEXE,
+  data = df_plot
+)
+
+m_quad_int <- glm.nb(
+  CDS_total_sum ~ (AGE_c + I(AGE_c^2)) * SEXE,
+  data = df_plot
+)
+
+test_interaction_quad <- anova(m_quad_add, m_quad_int)
+
+# Test de l'intérêt du terme quadratique dans le modèle avec interaction
+test_quad_interact <- anova(m_lin_int, m_quad_int)
+
+print(test_interaction_lin)
+print(test_interaction_quad)
+print(test_quad_interact)
+
+# Choix d'une forme commune pour comparer les relations entre sexes
+p_quad_interact <- test_quad_interact$`Pr(Chi)`[2]
+
+if (p_quad_interact < 0.05) {
+  
+  m_interaction <- m_quad_int
+  m_additif <- m_quad_add
+  test_interaction <- test_interaction_quad
+  forme_interaction <- "Quadratique"
+  
+} else {
+  
+  m_interaction <- m_lin_int
+  m_additif <- m_lin_add
+  test_interaction <- test_interaction_lin
+  forme_interaction <- "Linéaire"
+}
+
+cat(
+  "\nForme retenue pour la comparaison entre sexes :",
+  forme_interaction,
+  "\n"
+)
+
+# Test formel de différence entre les sexes
+print(test_interaction)
+
+
+summary(m_quad_int)
+
+# ------------------------------------------------------------
+# 4. Pentes selon le sexe à un âge de référence commun
+# ------------------------------------------------------------
+
+# Créer explicitement les données pour les deux sexes
+newdata_slopes <- expand.grid(
+  AGE_c = 0,
+  SEXE = levels(df_plot$SEXE)
+)
+
+# S'assurer que SEXE conserve les mêmes niveaux que dans le modèle
+newdata_slopes$SEXE <- factor(
+  newdata_slopes$SEXE,
+  levels = levels(df_plot$SEXE)
+)
+
+# Estimation des pentes sur l'échelle du lien (log)
+slopes_sexe <- slopes(
+  m_interaction,
+  variables = "AGE_c",
+  newdata = newdata_slopes,
+  type = "link"
+)
+
+slopes_sexe
+
+# ------------------------------------------------------------
+# 5. Fonction pour obtenir les prédictions et IC à 95 %
+# ------------------------------------------------------------
+
+pred_nb <- function(model, newdata) {
+  
+  pred <- predict(
+    model,
+    newdata = newdata,
+    type = "link",
+    se.fit = TRUE
+  )
+  
+  newdata %>%
+    mutate(
+      predicted = exp(pred$fit),
+      lower = exp(pred$fit - 1.96 * pred$se.fit),
+      upper = exp(pred$fit + 1.96 * pred$se.fit)
+    )
+}
+
+
+# ------------------------------------------------------------
+# 6. Graphique A : relation globale
+# ------------------------------------------------------------
+
+grid_global <- data.frame(
+  AGE_c = seq(
+    min(df_plot$AGE_c),
+    max(df_plot$AGE_c),
+    length.out = 200
+  )
+) %>%
+  mutate(AGE = AGE_c + age_mean)
+
+pred_global <- pred_nb(m_global, grid_global)
+
+p1 <- ggplot(
+  df_plot,
+  aes(x = AGE, y = CDS_total_sum)
+) +
+  geom_point(
+    alpha = 0.30,
+    color = "grey35",
+    size = 1.4
+  ) +
+  geom_ribbon(
+    data = pred_global,
+    aes(x = AGE, ymin = lower, ymax = upper),
+    inherit.aes = FALSE,
+    fill = "steelblue",
+    alpha = 0.18
+  ) +
+  geom_line(
+    data = pred_global,
+    aes(x = AGE, y = predicted),
+    inherit.aes = FALSE,
+    color = "steelblue",
+    linewidth = 1
+  ) +
+  labs(
+    x = "Age (years)",
+    y = "CDS total score",
+    title = "A. CDS total score according to age"
+  ) +
+  coord_cartesian(ylim = c(0, 100)) +
+  theme_classic(
+    base_size = 12,
+    base_family = "Arial"
+  )
+
+
+# ------------------------------------------------------------
+# 7. Graphique B : relations par sexe
+# ------------------------------------------------------------
+
+pred_sexe <- bind_rows(
+  lapply(levels(df_plot$SEXE), function(s) {
+    
+    d <- filter(df_plot, SEXE == s)
+    
+    grid <- data.frame(
+      AGE_c = seq(
+        min(d$AGE_c),
+        max(d$AGE_c),
+        length.out = 200
+      )
+    ) %>%
+      mutate(
+        AGE = AGE_c + age_mean,
+        SEXE = s
+      )
+    
+    pred_nb(
+      fits_sexe[[s]]$selected,
+      grid
+    )
+  })
+)
+
+p2 <- ggplot(
+  df_plot,
+  aes(
+    x = AGE,
+    y = CDS_total_sum,
+    color = SEXE,
+    fill = SEXE
+  )
+) +
+  geom_point(
+    alpha = 0.25,
+    size = 1.4
+  ) +
+  geom_ribbon(
+    data = pred_sexe,
+    aes(
+      x = AGE,
+      ymin = lower,
+      ymax = upper,
+      fill = SEXE
+    ),
+    inherit.aes = FALSE,
+    alpha = 0.15
+  ) +
+  geom_line(
+    data = pred_sexe,
+    aes(
+      x = AGE,
+      y = predicted,
+      color = SEXE
+    ),
+    inherit.aes = FALSE,
+    linewidth = 1
+  ) +
+  scale_color_manual(
+    values = c(
+      "Male" = "steelblue",
+      "Female" = "firebrick"
+    )
+  ) +
+  scale_fill_manual(
+    values = c(
+      "Male" = "steelblue",
+      "Female" = "firebrick"
+    )
+  ) +
+  labs(
+    x = "Age (years)",
+    y = "CDS total score",
+    title = "B. CDS total score according to age and sex",
+    color = NULL,
+    fill = NULL
+  ) +
+  coord_cartesian(ylim = c(0, 100)) +
+  theme_classic(
+    base_size = 12,
+    base_family = "Arial"
+  ) +
+  theme(
+    legend.position = "top"
+  )
+
+
+# ------------------------------------------------------------
+# 8. Assemblage et export des graphiques
+# ------------------------------------------------------------
+
+fig_CDS <- p1 / p2
+
+print(fig_CDS)
+
+ggsave(
+  here("Figures", "CDS_age_sex.png"),
+  fig_CDS,
+  width = 6,
+  height = 8,
+  dpi = 300
+)
+
+#############################################################################################################
+# CDS according to anxiety and depression and anxdep according to sex
+#####################################################################
 # Filter to remove cases without complete anxiety, depression and migraine
-anxdep <- c("ANXIETE_recoded", "DEPRESSION_recoded", "MIGRAINE")
-df2 <- df[complete.cases(df[, anxdep]), ]
-nrow(df2)
+anxdep1 <- c("ANXIETE_recoded", "DEPRESSION_recoded")
+df1 <- df[complete.cases(df[, anxdep1]), ]
+nrow(df1)
 
-df2$AGE_centered <- df2$AGE-mean(df2$AGE)
-describe(df2$AGE_centered)
-
-#####################################################################
-# Violin plots : Descriptives
-#####################################################################
-# CDS total and anxiety/depression (HADS) according to sex
-#####################################################################
-df2$ANXIETE_recoded    <- as.numeric(as.character(df2$ANXIETE_recoded))
-df2$DEPRESSION_recoded <- as.numeric(as.character(df2$DEPRESSION_recoded))
+df1$ANXIETE_recoded    <- as.numeric(as.character(df1$ANXIETE_recoded))
+df1$DEPRESSION_recoded <- as.numeric(as.character(df1$DEPRESSION_recoded))
 
 
 ######### Mann-Whitney tests for CDS, Anx and Dep according to sex ############
-describeBy(df2$CDS_total_sum, group = df2$SEXE)
-describeBy(df2$ANXIETE_recoded, group = df2$SEXE)
-describeBy(df2$DEPRESSION_recoded, group = df2$SEXE)
+describeBy(df1$CDS_total_sum, group = df1$SEXE)
+describeBy(df1$ANXIETE_recoded, group = df1$SEXE)
+describeBy(df1$DEPRESSION_recoded, group = df1$SEXE)
 
 library(rstatix)
 
@@ -855,9 +1243,9 @@ variables_a_tester <- c("CDS_total_sum", "ANXIETE_recoded", "DEPRESSION_recoded"
 
 mw_results <- lapply(variables_a_tester, function(var) {
   # Test de Mann-Whitney (Wilcoxon rank-sum test)
-  test_res <- df2 %>% wilcox_test(as.formula(paste(var, "~ SEXE")), detailed = TRUE)
+  test_res <- df1 %>% wilcox_test(as.formula(paste(var, "~ SEXE")), detailed = TRUE)
   # Taille d'effet (r de Rosenthal)
-  eff_res  <- df2 %>% wilcox_effsize(as.formula(paste(var, "~ SEXE")))
+  eff_res  <- df1 %>% wilcox_effsize(as.formula(paste(var, "~ SEXE")))
   
   # Fusion des résultats
   data.frame(
@@ -910,7 +1298,32 @@ ft_mw <- flextable(mw_results) %>%
 # --- 4. Export vers Word ---
 save_as_docx(ft_mw, path = here("figures", "Table_MannWhitney_Sex.docx"))
 
-########## Violin plots ###################
+
+#####################################################################
+# CDS total according to anxiety/depression level (HADS)
+#####################################################################
+df1$ANX_grp <- factor(ifelse(df1$ANXIETE_recoded >= 8, "≥ 8", "< 8"),
+                      levels = c("< 8", "≥ 8"))
+df1$DEP_grp <- factor(ifelse(df1$DEPRESSION_recoded >= 8, "≥ 8", "< 8"),
+                      levels = c("< 8", "≥ 8"))
+
+table(df1$ANX_grp)
+table(df1$DEP_grp)
+
+describeBy(df1$CDS_total_sum, group = df1$ANX_grp)
+wilcox_test(df1, CDS_total_sum ~ ANX_grp)
+wilcox_effsize(df1, CDS_total_sum ~ ANX_grp)
+
+describeBy(df1$CDS_total_sum, group = df1$DEP_grp)
+wilcox_test(df1, CDS_total_sum ~ DEP_grp)
+wilcox_effsize(df1, CDS_total_sum ~ DEP_grp)
+
+
+#####################################################################
+# Violin plots : Descriptives
+#####################################################################
+# CDS total and anxiety/depression (HADS) according to sex
+####################################################################
 # Convertit une p-value en étoiles (ns si non significatif)
 p_to_stars_ns <- function(p) {
   case_when(p < 0.001 ~ "***",
@@ -922,8 +1335,8 @@ p_to_stars_ns <- function(p) {
 
 
 # Libellés du sexe (h = homme est la référence, f = femme)
-df2$SEXE_lab <- factor(df2$SEXE, levels = c("h", "f"), labels = c("Men", "Women"))
-table(df2$SEXE_lab, useNA = "ifany")
+df1$SEXE_lab <- factor(df1$SEXE, levels = c("h", "f"), labels = c("Male", "Female"))
+table(df1$SEXE_lab, useNA = "ifany")
 
 make_violin_sex <- function(data, yvar, ylab, cutoff = NULL,
                             y_breaks = ggplot2::waiver(), y_lim = NULL,
@@ -972,15 +1385,15 @@ make_violin_sex <- function(data, yvar, ylab, cutoff = NULL,
     theme_classic(base_size = 12)
 }
 
-p_sex_cds <- make_violin_sex(df2, "CDS_total_sum", "CDS total score",
+p_sex_cds <- make_violin_sex(df1, "CDS_total_sum", "CDS total score",
                              cutoff = 70,
                              y_breaks = seq(0, 160, 20), y_lim=c(0, 160))
 
-p_sex_anx <- make_violin_sex(df2, "ANXIETE_recoded", "Anxiety score (HADS-A)",
+p_sex_anx <- make_violin_sex(df1, "ANXIETE_recoded", "Anxiety score (HADS-A)",
                              cutoff = 8,
                              y_breaks = seq(0, 25, 5), y_lim = c(0, 25))
 
-p_sex_dep <- make_violin_sex(df2, "DEPRESSION_recoded", "Depression score (HADS-D)",
+p_sex_dep <- make_violin_sex(df1, "DEPRESSION_recoded", "Depression score (HADS-D)",
                              cutoff = 8,
                              y_breaks = seq(0, 25, 5), y_lim = c(0, 25))
 
@@ -997,23 +1410,6 @@ ggsave(here("Figures", "violin_scores_by_sex.png"), violin_sex, width = 10, heig
 #####################################################################
 # CDS total according to anxiety/depression level (HADS)
 #####################################################################
-df2$ANX_grp <- factor(ifelse(df2$ANXIETE_recoded >= 8, "≥ 8", "< 8"),
-                      levels = c("< 8", "≥ 8"))
-df2$DEP_grp <- factor(ifelse(df2$DEPRESSION_recoded >= 8, "≥ 8", "< 8"),
-                      levels = c("< 8", "≥ 8"))
-
-table(df2$ANX_grp)
-table(df2$DEP_grp)
-
-describeBy(df2$CDS_total_sum, group = df2$ANX_grp)
-wilcox_test(df2, CDS_total_sum ~ ANX_grp)
-wilcox_effsize(df2, CDS_total_sum ~ ANX_grp)
-
-describeBy(df2$CDS_total_sum, group = df2$DEP_grp)
-wilcox_test(df2, CDS_total_sum ~ DEP_grp)
-wilcox_effsize(df2, CDS_total_sum ~ DEP_grp)
-
-
 # Convertit une p-value en étoiles (ns si non significatif)
 p_to_stars_ns <- function(p) {
   case_when(p < 0.001 ~ "***",
@@ -1045,7 +1441,7 @@ make_violin <- function(data, grp, xlab, fill_cols = c("lightskyblue", "royalblu
     geom_boxplot(width = 0.12, outliers = FALSE, fill = "slategray3", alpha = 0.9) +
     # Seuil CDS
     geom_hline(yintercept = cutoff, linetype = "dashed", color = "black", linewidth = 0.6) +
-   
+    
     # Crochet de significativité
     annotate("segment", x = 1, xend = 2, y = y_line, yend = y_line, linewidth = 0.5) +
     annotate("segment", x = 1, xend = 1, y = y_line - tick_h, yend = y_line, linewidth = 0.5) +
@@ -1059,8 +1455,8 @@ make_violin <- function(data, grp, xlab, fill_cols = c("lightskyblue", "royalblu
     theme_classic(base_size = 12)
 }
 
-p_vio_anx <- make_violin(df2, "ANX_grp", "Anxiety (HADS-A)")
-p_vio_dep <- make_violin(df2, "DEP_grp", "Depression (HADS-D)")
+p_vio_anx <- make_violin(df1, "ANX_grp", "Anxiety (HADS-A)")
+p_vio_dep <- make_violin(df1, "DEP_grp", "Depression (HADS-D)")
 
 
 violin_hads <- (p_vio_anx | p_vio_dep) +
@@ -1073,6 +1469,17 @@ ggsave(here("Figures", "violin_CDS_total_HADS.pdf"), violin_hads, width = 7, hei
 ggsave(here("Figures", "violin_CDS_total_HADS.png"), violin_hads, width = 7, height = 4.5, dpi = 300)
 
 
+
+###################################################################################################################
+# Linear Regression Models #
+###################################################################################################################
+# Filter to remove cases without complete anxiety, depression and migraine
+anxdep <- c("ANXIETE_recoded", "DEPRESSION_recoded", "MIGRAINE")
+df2 <- df[complete.cases(df[, anxdep]), ]
+nrow(df2)
+
+df2$AGE_centered <- df2$AGE-mean(df2$AGE)
+describe(df2$AGE_centered)
 
 ###################################################################################################################
 # CDS Total Score
@@ -1312,6 +1719,36 @@ testDispersion(M2)
 library(performance)
 check_collinearity(M2)
 
+
+##### Model 2bis : CDS ~ AGE*SEX #####
+M2b <- glmmTMB(
+  CDS_total_sum ~ AGE_centered*SEXE,
+  zi = ~ AGE_centered*SEXE,
+  family=truncated_nbinom2(),
+  data=df2)
+
+summary(M2b)
+
+# Exponential transformation of coefficients to interpret them as OR
+# For the binary effect (probability to have 0 = no symptom at all)
+exp(fixef(M2b)$zi)
+# For the intensity effect : regression on severity of reported symptoms
+exp(fixef(M2b)$cond)
+
+
+# Assumptions verification
+# Compute simulated residuals for Hurdle model
+residus_M2b <- simulateResiduals(fittedModel = M2b)
+
+# Assumptions plot (distribution, homoscedasticity, dispersion)
+plot(residus_M2b)
+testDispersion(M2b)
+
+# VIF & tolerance/checks
+library(performance)
+check_collinearity(M2b)
+
+
 #### Model 3 : CDS ~AGE+SEX+ANXIETY #####
 M3 <- glmmTMB(
   CDS_total_sum ~ AGE_centered+SEXE+ANXIETE_recoded,
@@ -1403,6 +1840,90 @@ check_collinearity(M4)
 
 check_model(M4)
 
+
+# b) Version cohérente avec vos Résultats (modèle hurdle)
+M4b <- glmmTMB(CDS_total_sum ~ AGE_centered * SEXE + ANXIETE_recoded + DEPRESSION_recoded,
+                  ziformula = ~ AGE_centered * SEXE + ANXIETE_recoded + DEPRESSION_recoded,
+                  family = truncated_nbinom2, data = df2)
+summary(M4b)
+anova(M4, M4b)
+
+# Exponential transformation of coefficients to interpret them as OR
+# For the binary effect (probability to have 0 = no symptom at all)
+exp(fixef(M4b)$zi)
+# For the intensity effect : regression on severity of reported symptoms
+exp(fixef(M4b)$cond)
+
+
+# Assumptions verification
+# Compute simulated residuals for Hurdle model
+residus_M4b <- simulateResiduals(fittedModel = M4b)
+
+# Assumptions plot (distribution, homoscedasticity, dispersion)
+plot(residus_M4b)
+testDispersion(M4b)
+
+# VIF & tolerance/checks
+library(performance)
+check_collinearity(M4b)
+
+check_model(M4b)
+
+
+# Interaction uniquement dans la composante positive
+M4_cond_int <- glmmTMB(
+  CDS_total_sum ~ AGE_centered * SEXE +
+    ANXIETE_recoded + DEPRESSION_recoded,
+  
+  ziformula = ~ AGE_centered + SEXE +
+    ANXIETE_recoded + DEPRESSION_recoded,
+  
+  family = truncated_nbinom2,
+  data = df2
+)
+
+summary(M4_cond_int)
+
+library(emmeans)
+
+# Pentes de l'âge dans la composante conditionnelle
+trends_cond <- emtrends(
+  M4_cond_int,
+  specs = ~ SEXE,
+  var = "AGE_centered",
+  component = "cond"
+)
+
+summary(trends_cond, infer = c(TRUE, TRUE))
+
+# Comparaison directe des pentes entre les sexes
+pairs(trends_cond)
+
+
+# Interaction uniquement dans la composante zéro
+M4_zi_int <- glmmTMB(
+  CDS_total_sum ~ AGE_centered + SEXE +
+    ANXIETE_recoded + DEPRESSION_recoded,
+  
+  ziformula = ~ AGE_centered * SEXE +
+    ANXIETE_recoded + DEPRESSION_recoded,
+  
+  family = truncated_nbinom2,
+  data = df2
+)
+
+# Comparaisons
+anova(M4, M4_cond_int, M4_zi_int, M4b)
+
+# Interaction dans la composante conditionnelle
+anova(M4, M4_cond_int)
+
+# Interaction dans la composante zéro
+anova(M4, M4_zi_int)
+
+# Interaction dans zi, une fois l'interaction cond incluse
+anova(M4_cond_int, M4b)
+
 #### Model 5 : CDS ~AGE+SEX+ANXIETY+DEPRESSION+MIGRAINE ####
 M5 <- glmmTMB(
   CDS_total_sum ~ AGE_centered+SEXE+ANXIETE_recoded+DEPRESSION_recoded+MIGRAINE,
@@ -1473,7 +1994,7 @@ check_model(M6)
 # The dispersion test is non significant, indicating a correctly predicted dispersion.
 
 ######## Models comparison #############
-anova(M1, M2, M3, M3b, M4, M5)
+anova(M1, M2, M2b, M3, M3b, M4, M4_cond_int, M4b, M5)
 
 mods <- list("Model 1"    = M1,
                 "Model 2"    = M2,
@@ -2227,6 +2748,12 @@ testDispersion(M4_F1)
 library(performance)
 check_collinearity(M4_F1)
 
+# b) Version cohérente avec vos Résultats (modèle hurdle)
+M4_int_F1 <- glmmTMB(CDS_F1 ~ AGE_centered * SEXE + ANXIETE_recoded + DEPRESSION_recoded,
+                  ziformula = ~ AGE_centered * SEXE + ANXIETE_recoded + DEPRESSION_recoded,
+                  family = truncated_nbinom2, data = df2)
+summary(M4_int_F1)
+anova(M4, M4_int_F1)
 
 
 #### Model 5 : CDS ~AGE+SEX+ANXIETY+DEPRESSION+MIGRAINE ####
@@ -2906,6 +3433,18 @@ testDispersion(M4_F2)
 # VIF & tolerance/checks
 library(performance)
 check_collinearity(M4_F2)
+
+
+
+
+# b) Version cohérente avec vos Résultats (modèle hurdle)
+M4_int_F2 <- glmmTMB(CDS_F2 ~ AGE_centered * SEXE + ANXIETE_recoded + DEPRESSION_recoded,
+                     ziformula = ~ AGE_centered * SEXE + ANXIETE_recoded + DEPRESSION_recoded,
+                     family = truncated_nbinom2, data = df2)
+summary(M4_int_F2)
+anova(M4, M4_int_F2)
+
+
 
 #### Model 5 : CDS ~AGE+SEX+ANXIETY+DEPRESSION+MIGRAINE ####
 M5_F2 <- glmmTMB(
@@ -3669,6 +4208,31 @@ ft <- flextable(loadings_std)
 doc <- read_docx()
 doc <- body_add_flextable(doc, value = ft)
 print(doc, target = here("Figures", "CDS_pop_gen_Mediation_loadings_std_boot.docx"))
+
+
+#################################################################################################################
+# Simple Mediation  Model CDS total score
+#################################################################################################################
+# Mediation model definition
+med_CDS_tot <- 
+  ' # direct effect
+             CDS_total ~ c*SEX
+           # mediators
+             AGE_centered ~ aA*SEX
+             Anxiety ~ aA*SEX
+             Depression ~ aD*SEX
+             CDS_total ~ bA*Anxiety + bD*Depression
+           # indirect effects
+             abA := aA*bA
+             abD := aD*bD
+           # total effect
+             total := c + (aA*bA) + (aD*bD)
+             # covariance
+             Anxiety ~~ Depression
+         '
+#### Fitting of mediation model
+fit_med <- sem(med_CDS_tot, data=df2, estimator="ML", se="bootstrap", bootstrap=5000)
+summary(fit_med, standardized=TRUE, fit.measures=TRUE, ci=TRUE)
 
 
 ################################################################################
